@@ -1,0 +1,16 @@
+[package]
+name = "rust-cyprto-ws"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+chrono = "0.4.42"
+dotenvy = "0.15.7"
+eframe = "0.33.0"
+futures = "0.3.31"
+futures-util = "0.3.31"
+serde_json = "1.0.145"
+simple-websockets = "0.1.6"
+tokio = { version = "1.48.0", features = ["rt-multi-thread", "macros", "signal"] }
+tokio-tungstenite = { version = "0.28.0", features = ["native-tls"] }
+uuid = "1.18.1"
