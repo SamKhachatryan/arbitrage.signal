@@ -34,16 +34,19 @@ async fn handle_ws_read(
                         continue;
                     }
                 };
+
                 if let Some(price) = parsed
                     .get("result")
                     .and_then(|data| data.get("last"))
                     .and_then(|v| v.as_str())
                     .and_then(|v| v.parse::<f64>().ok())
                 {
-                    let mut safe_state = state.lock().expect("Failed to lock");
-                    safe_state.update_price(&pair_name, "gate", price);
-                    if let Some(ref server_instance) = *server {
-                        server_instance.notify_price_change(&safe_state.exchange_price_map);
+                    if let Some(i64_ts) = parsed.get("time_ms").and_then(|v| v.as_i64()) {
+                        let mut safe_state = state.lock().expect("Failed to lock");
+                        safe_state.update_price(&pair_name, "gate", price, i64_ts);
+                        if let Some(ref server_instance) = *server {
+                            server_instance.notify_price_change(&safe_state.exchange_price_map);
+                        }
                     }
                 }
             }

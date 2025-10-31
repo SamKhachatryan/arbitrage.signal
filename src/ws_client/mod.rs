@@ -1,5 +1,5 @@
-mod common;
 mod clients;
+mod common;
 mod subscribe_list;
 
 use std::sync::{Arc, Mutex};
@@ -19,46 +19,29 @@ use crate::{
 use futures_util::FutureExt;
 // END FOR MACRO
 
-pub async fn subscribe_to_all_exchanges(state: &Arc<Mutex<AppState>>, server: Arc<Option<WSServer>>) {
-    subscribe_list!(
-        state,
-        server,
+pub async fn subscribe_to_all_exchanges(
+    state: &Arc<Mutex<AppState>>,
+    server: Arc<Option<WSServer>>,
+) {
+    let pair_names = vec![
         "btc-usdt",
-        [BinanceWSClient, OkxWSClient, GateWSClient, BybitWSClient]
-    );
-
-    subscribe_list!(
-        state,
-        server,
         "eth-usdt",
-        [BinanceWSClient, OkxWSClient, GateWSClient, BybitWSClient]
-    );
-
-    subscribe_list!(
-        state,
-        server,
-        "xrp-usdt",
-        [BinanceWSClient, OkxWSClient, GateWSClient, BybitWSClient]
-    );
-
-    subscribe_list!(
-        state,
-        server,
-        "doge-usdt",
-        [BinanceWSClient, OkxWSClient, GateWSClient, BybitWSClient]
-    );
-
-    subscribe_list!(
-        state,
-        server,
-        "ton-usdt",
-        [BinanceWSClient, OkxWSClient, GateWSClient, BybitWSClient]
-    );
-
-    subscribe_list!(
-        state,
-        server,
         "sol-usdt",
-        [BinanceWSClient, OkxWSClient, GateWSClient, BybitWSClient]
-    );
+        "doge-usdt",
+        "xrp-usdt",
+        "ton-usdt",
+        "ada-usdt",
+        "link-usdt",
+        "arb-usdt",
+        "op-usdt",
+    ];
+
+    for each in pair_names {
+        subscribe_list!(
+            state,
+            server,
+            each,
+            [BinanceWSClient, OkxWSClient, GateWSClient, BybitWSClient]
+        )
+    }
 }

@@ -2,6 +2,8 @@ use std::{collections::HashMap, sync::{Arc, Mutex}};
 
 use simple_websockets::{Event, EventHub, Message, Responder};
 
+use crate::state::PairExchange;
+
 pub struct WSServer {
     clients: Arc<Mutex<HashMap<u64, Responder>>>,
 }
@@ -33,7 +35,7 @@ impl WSServer {
 
     pub fn notify_price_change(
         &self,
-        exchange_price_map: &Arc<Mutex<HashMap<String, HashMap<String, f64>>>>,
+        exchange_price_map: &Arc<Mutex<HashMap<String, HashMap<String, PairExchange>>>>,
     ) {
         let json = {
             let map = exchange_price_map.lock().unwrap();

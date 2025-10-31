@@ -34,18 +34,30 @@ async fn handle_ws_read(
                         continue;
                     }
                 };
-                if let Some(price) = parsed
-                    .get("data")
-                    .and_then(|data| data.get(0))
-                    .and_then(|obj| obj.get("last"))
-                    .and_then(|v| v.as_str())
-                    .and_then(|v| v.parse::<f64>().ok())
-                {
-                    let mut safe_state = state.lock().expect("Failed to lock");
-                    safe_state.update_price(&pair_name, "okx", price);
-                    
-                    if let Some(ref server_instance) = *server {
-                        server_instance.notify_price_change(&safe_state.exchange_price_map);
+
+                if let Some(data) = parsed.get("data").and_then(|data| data.get(0)) {
+                    match data
+                        .get("last")
+                        .and_then(|v| v.as_str())
+                        .and_then(|v| v.parse::<f64>().ok())
+                    {
+                        Some(price) => {
+                            if let Some(ts) = data.get("ts") {
+                                if let Some(ts_str) = ts.as_str() {
+                                    if let Ok(i64_ts) = ts_str.parse::<i64>() {
+                                        let mut safe_state = state.lock().expect("Failed to lock");
+                                        safe_state.update_price(&pair_name, "okx", price, i64_ts);
+
+                                        if let Some(ref server_instance) = *server {
+                                            server_instance.notify_price_change(
+                                                &safe_state.exchange_price_map,
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        None => eprintln!("Failed to parse price okx"),
                     }
                 }
             }

@@ -10,10 +10,32 @@ let package_count = 0;
 websocket.onopen = (event) => {
     console.log("WebSocket connection established:", event);
     setInterval(() => {
-        console.log('Package got within second:', package_count - prev_package_count);
+        console.log('Package got within 10 second:', package_count - prev_package_count);
         prev_package_count = package_count;
-    }, 1000);
+    }, 10000);
 };
+
+const arbitrageThresholds = {
+    "btc-usdt": 0.5,     // High liquidity, tight spreads, fees matter
+    "eth-usdt": 0.6,     // Slightly more volatile than BTC
+    "sol-usdt": 0.7,     // Mid-cap, exchange-specific variance
+    "doge-usdt": 0.8,    // Meme-driven volatility, slippage risk
+    "xrp-usdt": 0.7,     // Regulatory-driven price swings
+    "ton-usdt": 0.9,     // Newer token, wider spreads
+    "ada-usdt": 0.6,     // High volume, moderate spread
+    "link-usdt": 0.7,    // DeFi token, exchange-specific gaps
+    "arb-usdt": 0.8,     // Governance token, volatile across CEXs
+    "op-usdt": 0.8,       // Layer 2 token, frequent spread divergence
+};
+
+const getReliability = (pairExchange) => {
+    if (Date.now() - pairExchange.last_update_ts < 120 && pairExchange.latency < 100) return 'high';
+    if (Date.now() - pairExchange.last_update_ts < 220 && pairExchange.latency < 200) return 'medium';
+
+    return 'low';
+}
+
+const riskCoef = 2;
 
 websocket.onmessage = (event) => {
     package_count++;
@@ -22,18 +44,35 @@ websocket.onmessage = (event) => {
     Object.entries(parsed).forEach(([pairName, pair]) => {
         const allExchangesMap = Object.entries(pair);
 
-        allExchangesMap.forEach(([exchangeName, price]) => {
-            const otherExchanges = allExchangesMap.filter(item => item.exchangeName !== exchangeName);
-            const otherExchangesMod = otherExchanges.reduce((acc, [, price]) => acc + price * 10000, 0) / otherExchanges.length;
+        allExchangesMap.forEach(([exchangeName, pairExchange]) => {
+            allExchangesMap.forEach(([otherExchangeName, otherPairExchange]) => {
+                if (otherExchangeName !== exchangeName) {
+                    const highest = Math.max(pairExchange.price, otherPairExchange.price);
+                    const lowest = Math.min(pairExchange.price, otherPairExchange.price);
+                    const diffPercent = ((highest - lowest) / lowest) * 100.0;
 
-            diffMap[pairName] ??= {
-                diff: 0,
-                exchangeName: exchangeName,
-            };
+                    const acceptableThreshold = (arbitrageThresholds[pairName] || 0.5) / riskCoef;
+
+                    if (diffPercent >= acceptableThreshold) {
+                        const firstReliability = getReliability(pairExchange);
+                        const secondReliability = getReliability(pairExchange);
+
+                        if (firstReliability !== 'low' && secondReliability !== 'low') {
+                            console.log('Arbitrage opportunity', pairName, `${exchangeName} (${pairExchange.price}) (${firstReliability})`, '-', `${otherExchangeName} (${otherPairExchange.price}) (${secondReliability})`);
+                        }
+                    }
+                }
+            });
+            // const otherExchangesMod = otherExchanges.reduce((acc, [, price]) => acc + price * 10000, 0) / otherExchanges.length;
+
+            // diffMap[pairName] ??= {
+            //     diff: 0,
+            //     exchangeName: exchangeName,
+            // };
 
             // if (Math.abs(price * 10000 - otherExchangesMod) > diffMap[pairName].diff) {
-                diffMap[pairName].diff = Math.abs(price * 10000 - otherExchangesMod);
-                diffMap[pairName].exchangeName = exchangeName
+            // diffMap[pairName].diff = Math.abs(price * 10000 - otherExchangesMod);
+            // diffMap[pairName].exchangeName = exchangeName
             // }
         });
     });

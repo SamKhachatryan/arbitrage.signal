@@ -25,24 +25,35 @@ async fn handle_ws_read(
 ) {
     while let Some(msg_result) = read.next().await {
         match msg_result {
-            Ok(Message::Text(text)) => match serde_json::from_str::<Value>(&text) {
-                Ok(safe_value) => match safe_value.get("p").and_then(|v| v.as_str()) {
+            Ok(Message::Text(text)) => {
+                let parsed: Value = match serde_json::from_str(&text) {
+                    Ok(val) => val,
+                    Err(e) => {
+                        eprintln!("Error parsing JSON: {} - skipping message", e);
+                        continue;
+                    }
+                };
+
+                match parsed.get("p").and_then(|v| v.as_str()) {
                     Some(price_str) => match price_str.parse::<f64>() {
-                        Ok(decimal_f64) => {
-                            let mut safe_state = state.lock().expect("Failed to lock");
-                            
-                            safe_state.update_price(&pair_name, "binance", decimal_f64);
-                            
-                            if let Some(ref server_instance) = *server {
-                                server_instance.notify_price_change(&safe_state.exchange_price_map);
+                        Ok(price) => {
+                            if let Some(ts) = parsed.get("T") {
+                                if let Some(i64_ts) = ts.as_i64() {
+                                    let mut safe_state = state.lock().expect("Failed to lock");
+                                    safe_state.update_price(&pair_name, "binance", price, i64_ts);
+
+                                    if let Some(ref server_instance) = *server {
+                                        server_instance
+                                            .notify_price_change(&safe_state.exchange_price_map);
+                                    }
+                                }
                             }
-                        }
-                        Err(e) => eprintln!("Failed to parse price '{}' as f64: {}", price_str, e),
+                        },
+                        Err(_) => eprintln!("Failed to parse price as f64")
                     },
-                    None => eprintln!("Price field missing: skipping message"),
-                },
-                Err(e) => eprintln!("Error parsing JSON: {} - skipping message", e),
-            },
+                    None => eprintln!("Failed to parse price as str"),
+                };
+            }
             Ok(Message::Binary(_)) => {
                 // ignore binary messages
             }

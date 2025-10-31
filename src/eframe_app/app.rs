@@ -34,8 +34,8 @@ impl eframe::App for MyApp {
                 for (i, (key, value)) in cloned_data.iter().enumerate() {
                     ui.heading(key);
 
-                    for (exchange_name, price) in value {
-                        ui.label(format!("{}: {}", exchange_name, price));
+                    for (exchange_name, pair_exchange) in value {
+                        ui.label(format!("{}: {}", exchange_name, pair_exchange.price));
                     }
 
                     let is_last = i + 1 >= total;
