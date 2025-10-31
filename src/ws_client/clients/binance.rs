@@ -12,11 +12,13 @@ use tokio_tungstenite::{
 
 use crate::{
     state::{AppControl, AppState},
-    ws_client::common::ExchangeWSClient,
+    ws_client::common::{self, ExchangeWSClient},
+    ws_server::WSServer,
 };
 
 async fn handle_ws_read(
     state: Arc<Mutex<AppState>>,
+    server: Arc<Option<WSServer>>,
     mut read: impl StreamExt<Item = Result<Message, tungstenite::Error>> + Unpin,
     //ui: Arc<Mutex<AppState>>,
     pair_name: String,
@@ -27,8 +29,13 @@ async fn handle_ws_read(
                 Ok(safe_value) => match safe_value.get("p").and_then(|v| v.as_str()) {
                     Some(price_str) => match price_str.parse::<f64>() {
                         Ok(decimal_f64) => {
-                            let mut safe_store = state.lock().expect("Failed to lock");
-                            safe_store.update_price(&pair_name, "binance", decimal_f64);
+                            let mut safe_state = state.lock().expect("Failed to lock");
+                            
+                            safe_state.update_price(&pair_name, "binance", decimal_f64);
+                            
+                            if let Some(ref server_instance) = *server {
+                                server_instance.notify_price_change(&safe_state.exchange_price_map);
+                            }
                         }
                         Err(e) => eprintln!("Failed to parse price '{}' as f64: {}", price_str, e),
                     },
@@ -61,7 +68,11 @@ async fn handle_ws_read(
 pub struct BinanceWSClient {}
 
 impl ExchangeWSClient for BinanceWSClient {
-    async fn subscribe(state: Arc<Mutex<AppState>>, pair_name: String) {
+    async fn subscribe(
+        state: Arc<Mutex<AppState>>,
+        server: Arc<Option<WSServer>>,
+        pair_name: String,
+    ) {
         let url = env::var("BINANCE_WS_URL").expect("BINANCE_WS_URL not set in .env");
         let pair_url = format!(
             "{}/{}@trade",
@@ -70,8 +81,9 @@ impl ExchangeWSClient for BinanceWSClient {
         );
         let (ws_stream, _) = connect_async(pair_url).await.expect("Failed to connect");
 
-        let (_, read) = ws_stream.split();
+        let (write, read) = ws_stream.split();
 
-        tokio::spawn(handle_ws_read(state, read, pair_name));
+        tokio::spawn(common::send_ping_loop(write));
+        tokio::spawn(handle_ws_read(state, server, read, pair_name));
     }
 }

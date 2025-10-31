@@ -1,54 +1,48 @@
-use simple_websockets::{Event, EventHub, Responder};
 use std::{collections::HashMap, sync::{Arc, Mutex}};
 
+use simple_websockets::{Event, EventHub, Message, Responder};
+
 pub struct WSServer {
-    clients: HashMap<u64, Responder>,
-    event_hub: EventHub,
+    clients: Arc<Mutex<HashMap<u64, Responder>>>,
 }
 
-pub trait WSServerNotification {
-    fn notify_price_change(exchange_price_map: Arc<Mutex<HashMap<String, HashMap<String, f64>>>>);
-}
+impl WSServer {
+    pub fn new() -> Self {
+        Self {
+            clients: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
 
-impl WSServerNotification for WSServer {
-    fn notify_price_change(exchange_price_map: Arc<Mutex<HashMap<String, HashMap<String, f64>>>>) {
-        // releasing lock earlier
+    pub fn start(&self, event_hub: EventHub) {
+        loop {
+            match event_hub.poll_event() {
+                Event::Connect(client_id, responder) => {
+                    self.clients.lock().unwrap().insert(client_id, responder);
+                }
+                Event::Disconnect(client_id) => {
+                    self.clients.lock().unwrap().remove(&client_id);
+                }
+                Event::Message(client_id, msg) => {
+                    if let Some(responder) = self.clients.lock().unwrap().get(&client_id) {
+                        responder.send(msg);
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn notify_price_change(
+        &self,
+        exchange_price_map: &Arc<Mutex<HashMap<String, HashMap<String, f64>>>>,
+    ) {
         let json = {
-            let safe_exchange_price_map = {
-                let locked  = exchange_price_map.lock().expect("Failed to lock");
-                locked.clone()
-            };
-            serde_json::to_string(&safe_exchange_price_map).unwrap();
+            let map = exchange_price_map.lock().unwrap();
+            serde_json::to_string(&*map).unwrap()
         };
 
-    }
-}
-
-pub fn init_server() {
-    let mut ws_server = WSServer {
-        event_hub: simple_websockets::launch(4010).expect("ws_server: failed to listen on port 4010"),
-        clients: HashMap::new(),
-    };
-
-    loop {
-        match ws_server.event_hub.poll_event() {
-            Event::Connect(client_id, responder) => {
-                println!("A client connected with id #{}", client_id);
-                // add their Responder to our `clients` map:
-                ws_server.clients.insert(client_id, responder);
-            },
-            Event::Disconnect(client_id) => {
-                println!("Client #{} disconnected.", client_id);
-                // remove the disconnected client from the clients map:
-                ws_server.clients.remove(&client_id);
-            },
-            Event::Message(client_id, message) => {
-                println!("Received a message from client #{}: {:?}", client_id, message);
-                // retrieve this client's `Responder`:
-                let responder = ws_server.clients.get(&client_id).unwrap();
-                // echo the message back:
-                responder.send(message);
-            },
+        let clients = self.clients.lock().unwrap();
+        for responder in clients.values() {
+            responder.send(Message::Text(json.clone()));
         }
     }
 }

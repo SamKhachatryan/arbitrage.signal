@@ -13,11 +13,13 @@ use tokio_tungstenite::{
 
 use crate::{
     state::{AppControl, AppState},
-    ws_client::common::ExchangeWSClient,
+    ws_client::common::{self, ExchangeWSClient},
+    ws_server::WSServer,
 };
 
 async fn handle_ws_read(
     state: Arc<Mutex<AppState>>,
+    server: Arc<Option<WSServer>>,
     mut read: impl StreamExt<Item = Result<Message, tungstenite::Error>> + Unpin,
     //ui: Arc<Mutex<AppState>>,
     pair_name: String,
@@ -39,8 +41,12 @@ async fn handle_ws_read(
                     .and_then(|v| v.as_str())
                     .and_then(|v| v.parse::<f64>().ok())
                 {
-                    let mut safe_store = state.lock().expect("Failed to lock");
-                    safe_store.update_price(&pair_name, "okx", price);
+                    let mut safe_state = state.lock().expect("Failed to lock");
+                    safe_state.update_price(&pair_name, "okx", price);
+                    
+                    if let Some(ref server_instance) = *server {
+                        server_instance.notify_price_change(&safe_state.exchange_price_map);
+                    }
                 }
             }
             Ok(Message::Binary(_)) => {
@@ -68,7 +74,11 @@ async fn handle_ws_read(
 pub struct OkxWSClient {}
 
 impl ExchangeWSClient for OkxWSClient {
-    async fn subscribe(state: Arc<Mutex<AppState>>, pair_name: String) {
+    async fn subscribe(
+        state: Arc<Mutex<AppState>>,
+        server: Arc<Option<WSServer>>,
+        pair_name: String,
+    ) {
         let url = env::var("OKX_WS_URL").expect("OKX_WS_URL not set in .env");
         let (ws_stream, _) = connect_async(url).await.expect("Failed to connect");
 
@@ -88,6 +98,7 @@ impl ExchangeWSClient for OkxWSClient {
             .await
             .unwrap();
 
-        tokio::spawn(handle_ws_read(state, read, pair_name));
+        tokio::spawn(common::send_ping_loop(write));
+        tokio::spawn(handle_ws_read(state, server, read, pair_name));
     }
 }

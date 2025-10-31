@@ -1,6 +1,6 @@
 #[macro_export]
 macro_rules! subscribe_list {
-    ($state:expr, $pair:expr, [ $( $svc:ident ),* ]) => {
+    ($state:expr, $server:expr, $pair:expr, [ $( $svc:ident ),* ]) => {
         {
             use futures::future::{join_all, BoxFuture};
 
@@ -8,7 +8,8 @@ macro_rules! subscribe_list {
                 $(
                     {
                         let cloned = Arc::clone(&$state);
-                        $svc::subscribe(cloned, $pair.to_string()).boxed()
+                        let cloned_server = Arc::clone(&$server);
+                        $svc::subscribe(cloned, cloned_server, $pair.to_string()).boxed()
                     },
                 )*
             ];
