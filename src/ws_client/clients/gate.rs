@@ -42,7 +42,7 @@ async fn handle_ws_read(
                     .and_then(|v| v.parse::<f64>().ok())
                 {
                     if let Some(i64_ts) = parsed.get("time_ms").and_then(|v| v.as_i64()) {
-                        let mut safe_state = state.lock().expect("Failed to lock");
+                        let safe_state = state.lock().expect("Failed to lock");
                         safe_state.update_price(&pair_name, "gate", price, i64_ts);
                         if let Some(ref server_instance) = *server {
                             server_instance.notify_price_change(&safe_state.exchange_price_map);

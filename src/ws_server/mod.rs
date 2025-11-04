@@ -1,7 +1,11 @@
 pub mod init;
 
-use std::{collections::HashMap, sync::{Arc, Mutex}};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 
+use dashmap::DashMap;
 use lazy_static::lazy_static;
 use prometheus::{Counter, IntGauge, Opts};
 use simple_websockets::{Event, EventHub, Message, Responder};
@@ -14,12 +18,16 @@ pub struct WSServer {
 
 lazy_static! {
     pub static ref WS_SERVER_PACKAGES_SENT_COUNTER: Counter = {
-        let opts = Opts::new("ws_server_packages_sent_counter", "WS Server: Total number of packages sent");
+        let opts = Opts::new(
+            "ws_server_packages_sent_counter",
+            "WS Server: Total number of packages sent",
+        );
         let counter = Counter::with_opts(opts).expect("Failed to create counter");
-        METRIC_REGISTRY.register(Box::new(counter.clone())).expect("Failed to register counter");
+        METRIC_REGISTRY
+            .register(Box::new(counter.clone()))
+            .expect("Failed to register counter");
         counter
     };
-
 }
 
 impl WSServer {
@@ -31,7 +39,8 @@ impl WSServer {
 
     pub fn start(&self, event_hub: EventHub) {
         let counter_opts = Opts::new("ws_server_clients_counter", "WS Server: Clients counter");
-        let gauge: prometheus::core::GenericGauge<prometheus::core::AtomicI64> = IntGauge::with_opts(counter_opts).unwrap();
+        let gauge: prometheus::core::GenericGauge<prometheus::core::AtomicI64> =
+            IntGauge::with_opts(counter_opts).unwrap();
 
         let _ = METRIC_REGISTRY.register(Box::new(gauge.clone()));
 
@@ -56,11 +65,15 @@ impl WSServer {
 
     pub fn notify_price_change(
         &self,
-        exchange_price_map: &Arc<Mutex<HashMap<String, HashMap<String, PairExchange>>>>,
+        exchange_price_map: &Arc<DashMap<String, HashMap<String, PairExchange>>>,
     ) {
         let json = {
-            let map = exchange_price_map.lock().unwrap();
-            serde_json::to_string(&*map).unwrap()
+            let map: HashMap<_, _> = exchange_price_map
+                .iter()
+                .map(|kv| (kv.key().clone(), kv.value().clone()))
+                .collect();
+
+            serde_json::to_string(&map).unwrap()
         };
 
         WS_SERVER_PACKAGES_SENT_COUNTER.inc();

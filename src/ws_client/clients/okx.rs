@@ -45,7 +45,7 @@ async fn handle_ws_read(
                             if let Some(ts) = data.get("ts") {
                                 if let Some(ts_str) = ts.as_str() {
                                     if let Ok(i64_ts) = ts_str.parse::<i64>() {
-                                        let mut safe_state = state.lock().expect("Failed to lock");
+                                        let safe_state = state.lock().expect("Failed to lock");
                                         safe_state.update_price(&pair_name, "okx", price, i64_ts);
 
                                         if let Some(ref server_instance) = *server {

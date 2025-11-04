@@ -4,6 +4,7 @@ use std::{
 };
 
 use chrono::{TimeZone, Utc, offset::LocalResult};
+use dashmap::DashMap;
 use serde::Serialize;
 
 #[derive(Serialize, Clone)]
@@ -14,20 +15,16 @@ pub struct PairExchange {
 }
 
 pub struct AppState {
-    pub exchange_price_map: Arc<Mutex<HashMap<String, HashMap<String, PairExchange>>>>,
+    pub exchange_price_map: Arc<DashMap<String, HashMap<String, PairExchange>>>,
 }
 
 pub trait AppControl {
-    fn update_price(&mut self, pair: &str, exchange: &str, price: f64, ts: i64);
+    fn update_price(&self, pair: &str, exchange: &str, price: f64, ts: i64);
 }
 
 impl AppControl for AppState {
-    fn update_price(&mut self, pair: &str, exchange: &str, price: f64, ts: i64) {
-        let mut locked_exchange = self
-            .exchange_price_map
-            .lock()
-            .expect("Failed to update price");
-        let exchange_map = locked_exchange
+    fn update_price(&self, pair: &str, exchange: &str, price: f64, ts: i64) {
+        let mut exchange_map = self.exchange_price_map
             .entry(pair.to_string())
             .or_insert_with(HashMap::new);
 
@@ -50,6 +47,6 @@ impl AppControl for AppState {
 
 pub fn init_app_state() -> Arc<Mutex<AppState>> {
     Arc::new(Mutex::new(AppState {
-        exchange_price_map: Arc::new(Mutex::new(HashMap::new())),
+        exchange_price_map: Arc::new(DashMap::new()),
     }))
 }
