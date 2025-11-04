@@ -1,0 +1,4 @@
+scrape_configs:
+      - job_name: 'arbitrage.signal'
+        static_configs:
+          - targets: ['localhost:4011'] # Or the IP and port where your app exposes metrics

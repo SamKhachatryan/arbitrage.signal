@@ -1,49 +1,40 @@
 mod eframe_app;
+mod health;
 mod state;
 mod ws_client;
 mod ws_server;
 
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-    thread,
-};
+use std::sync::Arc;
 
 use dotenvy::dotenv;
 use tokio::signal;
 
-use crate::ws_server::WSServer;
+use crate::{health::prometheus::init_prometheus_server, state::init_app_state, ws_server::init::init_ws_server};
 
-#[tokio::main]
-async fn main() {
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
     dotenv().ok().expect("Failed to load env variables");
 
-    let state = Arc::new(Mutex::new(state::AppState {
-        exchange_price_map: Arc::new(Mutex::new(HashMap::new())),
-    }));
-
-    let cloned_state = Arc::clone(&state);
-
-    let server = Arc::new(Option::Some(WSServer::new()));
-
-    let current_server = Arc::clone(&server);
-
-    thread::spawn(move || {
-        if let Some(ref server_instance) = *current_server {
-            let event_hub = simple_websockets::launch(4010).expect("...");
-            server_instance.start(event_hub);
-        }
-    });
-
+    let server = init_ws_server();
     let client_server = Arc::clone(&server);
+
+    let state = init_app_state();
 
     ws_client::subscribe_to_all_exchanges(&state, client_server).await;
 
-    eframe_app::spawn_eframe_ui(cloned_state.clone());
+    // let cloned_state = Arc::clone(&state);
+    // eframe_app::spawn_eframe_ui(cloned_state.clone());s
 
-    signal::ctrl_c()
-        .await
-        .expect("Failed to listen for shutdown signal");
+    let http_server = init_prometheus_server();
 
-    println!("Shutting down gracefully.");
+    tokio::select! {
+        _ = http_server => {
+            println!("HTTP Server stopped");
+        }
+        _ = signal::ctrl_c() => {
+            println!("Shutting down");
+        }
+    }
+
+    Ok(())
 }

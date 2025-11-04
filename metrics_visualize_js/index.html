@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Prometheus Metrics Viewer</title>
+    <script src="https://cdn.jsdelivr.net/npm/uplot@1.6.7/dist/uPlot.iife.min.js"></script>
+    <link href="https://unpkg.com/uplot/dist/uPlot.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 20px;
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+
+        th,
+        td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f4f4f4;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Prometheus Metrics Viewer</h1>
+    <button onclick="loadMetrics()">Refresh</button>
+    <table id="metricsTable">
+        <thead>
+            <tr>
+                <th>Metric</th>
+                <th>Value</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+    <div class="charts"></div>
+
+    <script>
+        const renderNaturalTimeValueChart = (name) => {
+            const startDate = Date.now();
+            const times = [0];
+            const values = [0];
+            const opts = {
+                title: name,
+                width: window.innerWidth / 2,
+                height: window.innerHeight / 2,
+                scales: {
+                    x: { time: false },
+                    y: { auto: true }
+                },
+                series: [
+                    {},
+                    {
+                        label: "Packages",
+                        stroke: "blue",
+                        points: { show: true }
+                    }
+                ]
+            };
+
+            const chart = new uPlot(opts, [times, values], document.getElementsByClassName("charts")[0]);
+            return {
+                pushValue: (value,) => {
+                    times.push(Math.floor((Date.now() - startDate) / 1000));
+                    values.push(value);
+                    chart.setData([times, values])
+                }
+            };
+        }
+
+        const cumulativeMetrics = {
+            'ws_server_packages_sent_counter': {
+                value: 0,
+                uptimeValue: 0,
+                chart: renderNaturalTimeValueChart('Packages sent per second')
+            }
+        };
+
+        setInterval(loadMetrics, 1000);
+
+        async function loadMetrics() {
+            const response = await fetch('http://localhost:4011/health-metrics');
+            const text = await response.text();
+            const lines = text.split('\n');
+            const tbody = document.querySelector('#metricsTable tbody');
+            tbody.innerHTML = '';
+
+            lines.forEach(line => {
+                if (line.startsWith('#') || line.trim() === '') return;
+                const [metric, value] = line.trim().split(/\s+/);
+                const row = document.createElement('tr');
+                row.innerHTML = `<td>${metric}</td><td>${value}</td>`;
+                tbody.appendChild(row);
+
+                if (cumulativeMetrics[metric]) {
+                    if (cumulativeMetrics[metric].value) cumulativeMetrics[metric].chart.pushValue(+value - cumulativeMetrics[metric].value);
+                    cumulativeMetrics[metric].value = +value;
+                }
+            });
+        }
+
+        loadMetrics();
+    </script>
+</body>
+
+</html>

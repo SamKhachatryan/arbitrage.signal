@@ -47,3 +47,9 @@ impl AppControl for AppState {
         }
     }
 }
+
+pub fn init_app_state() -> Arc<Mutex<AppState>> {
+    Arc::new(Mutex::new(AppState {
+        exchange_price_map: Arc::new(Mutex::new(HashMap::new())),
+    }))
+}
