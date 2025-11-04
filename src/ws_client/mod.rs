@@ -11,7 +11,7 @@ use crate::{
     state::AppState,
     ws_client::{
         clients::{
-            binance::BinanceWSClient, bybit::BybitWSClient, gate::GateWSClient, okx::OkxWSClient,
+            binance::BinanceWSClient, bybit::BybitWSClient, gate::GateWSClient, okx::OkxWSClient, whitebit::WhitebitWSClient
         },
         common::ExchangeWSClient,
     },
@@ -51,7 +51,7 @@ pub async fn subscribe_to_all_exchanges(
             state,
             server,
             each,
-            [BinanceWSClient, OkxWSClient, GateWSClient, BybitWSClient]
+            [BinanceWSClient, OkxWSClient, GateWSClient, BybitWSClient, WhitebitWSClient]
         )
     }
 }

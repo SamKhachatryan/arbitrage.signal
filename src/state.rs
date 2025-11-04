@@ -24,7 +24,8 @@ pub trait AppControl {
 
 impl AppControl for AppState {
     fn update_price(&self, pair: &str, exchange: &str, price: f64, ts: i64) {
-        let mut exchange_map = self.exchange_price_map
+        let mut exchange_map = self
+            .exchange_price_map
             .entry(pair.to_string())
             .or_insert_with(HashMap::new);
 
@@ -37,7 +38,7 @@ impl AppControl for AppState {
                 exchange.to_string(),
                 PairExchange {
                     price: price,
-                    latency: diff_ms,
+                    latency: diff_ms.max(0),
                     last_update_ts: ts,
                 },
             );
