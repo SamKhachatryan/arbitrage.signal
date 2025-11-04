@@ -34,6 +34,16 @@ pub async fn subscribe_to_all_exchanges(
         "link-usdt",
         "arb-usdt",
         "op-usdt",
+        "ltc-usdt",
+        "bch-usdt",
+        "uni-usdt",
+        "avax-usdt",
+        "apt-usdt",
+        "near-usdt",
+        "matic-usdt",
+        "pepe-usdt",
+        "floki-usdt",
+        "sui-usdt",
     ];
 
     for each in pair_names {

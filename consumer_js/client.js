@@ -9,33 +9,55 @@ let package_count = 0;
 
 websocket.onopen = (event) => {
     console.log("WebSocket connection established:", event);
-    setInterval(() => {
-        console.log('Package got within 10 second:', package_count - prev_package_count);
-        prev_package_count = package_count;
-    }, 10000);
+    // setInterval(() => {
+    //     console.log('Package got within 10 second:', package_count - prev_package_count);
+    //     prev_package_count = package_count;
+    // }, 10000);
 };
 
 const arbitrageThresholds = {
-    "btc-usdt": 0.5,     // High liquidity, tight spreads, fees matter
-    "eth-usdt": 0.6,     // Slightly more volatile than BTC
-    "sol-usdt": 0.7,     // Mid-cap, exchange-specific variance
-    "doge-usdt": 0.8,    // Meme-driven volatility, slippage risk
-    "xrp-usdt": 0.7,     // Regulatory-driven price swings
-    "ton-usdt": 0.9,     // Newer token, wider spreads
-    "ada-usdt": 0.6,     // High volume, moderate spread
-    "link-usdt": 0.7,    // DeFi token, exchange-specific gaps
-    "arb-usdt": 0.8,     // Governance token, volatile across CEXs
-    "op-usdt": 0.8,       // Layer 2 token, frequent spread divergence
+  "btc-usdt": 0.5,     // High liquidity, tight spreads, fees matter
+  "eth-usdt": 0.6,     // Slightly more volatile than BTC
+  "sol-usdt": 0.7,     // Mid-cap, exchange-specific variance
+  "doge-usdt": 0.8,    // Meme-driven volatility, slippage risk
+  "xrp-usdt": 0.7,     // Regulatory-driven price swings
+  "ton-usdt": 0.9,     // Newer token, wider spreads
+  "ada-usdt": 0.6,     // High volume, moderate spread
+  "link-usdt": 0.7,    // DeFi token, exchange-specific gaps
+  "arb-usdt": 0.8,     // Governance token, volatile across CEXs
+  "op-usdt": 0.8,      // Layer 2 token, frequent spread divergence
+  "ltc-usdt": 0.6,     // Legacy coin, decent liquidity
+  "bch-usdt": 0.7,     // Forked coin, volatile on low volume
+  "uni-usdt": 0.8,     // DeFi token, spread varies by exchange
+  "avax-usdt": 0.8,    // Layer 1 token, moderate liquidity
+  "apt-usdt": 0.9,     // Newer L1, often wide spreads
+  "near-usdt": 0.8,    // L1 with regional exchange variance
+  "matic-usdt": 0.7,   // High volume, but fee-sensitive
+  "pepe-usdt": 1.2,    // Meme coin, extreme volatility
+  "floki-usdt": 1.3,   // Meme coin, low depth, high slippage
+  "sui-usdt": 0.9      // Newer token, frequent arbitrage gaps
+};
+
+const reliabilityEnum = {
+    low: 1,
+    medium: 2,
+    high: 3,
+};
+
+const reliabilityViewEnum = {
+    [reliabilityEnum.low]: 'low',
+    [reliabilityEnum.medium]: 'medium',
+    [reliabilityEnum.high]: 'high',
 };
 
 const getReliability = (pairExchange) => {
-    if (Date.now() - pairExchange.last_update_ts < 120 && pairExchange.latency < 100) return 'high';
-    if (Date.now() - pairExchange.last_update_ts < 220 && pairExchange.latency < 200) return 'medium';
+    if (Date.now() - pairExchange.last_update_ts < 120 && pairExchange.latency < 100) return reliabilityEnum.high;
+    if (Date.now() - pairExchange.last_update_ts < 220 && pairExchange.latency < 200) return reliabilityEnum.medium;
 
-    return 'low';
+    return reliabilityEnum.low;
 }
 
-const riskCoef = 2;
+const riskCoef = 3;
 
 websocket.onmessage = (event) => {
     package_count++;
@@ -57,8 +79,8 @@ websocket.onmessage = (event) => {
                         const firstReliability = getReliability(pairExchange);
                         const secondReliability = getReliability(pairExchange);
 
-                        if (firstReliability !== 'low' && secondReliability !== 'low') {
-                            console.log('Arbitrage opportunity', pairName, `${exchangeName} (${pairExchange.price}) (${firstReliability})`, '-', `${otherExchangeName} (${otherPairExchange.price}) (${secondReliability})`);
+                        if (firstReliability > reliabilityEnum.medium && secondReliability > reliabilityEnum.medium) {
+                            console.log('Arbitrage opportunity', pairName, `${exchangeName} (${pairExchange.price}) (${reliabilityViewEnum[firstReliability]})`, '-', `${otherExchangeName} (${otherPairExchange.price}) (${reliabilityViewEnum[secondReliability]})`);
                         }
                     }
                 }
