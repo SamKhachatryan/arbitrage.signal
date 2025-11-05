@@ -1,6 +1,7 @@
 const wsUri = "ws://localhost:4010";
 
 const websocket = new WebSocket(wsUri);
+websocket.binaryType = "arraybuffer"; // important
 
 const diffMap = {};
 
@@ -57,30 +58,39 @@ const getReliability = (pairExchange) => {
     return reliabilityEnum.low;
 }
 
-const riskCoef = 3;
+const riskCoef = 6;
+
+const toPairExchange = (binary_arr) => ({
+    price: binary_arr[0],
+    latency: binary_arr[1],
+    last_update_ts: binary_arr[2],
+})
 
 websocket.onmessage = (event) => {
     package_count++;
-    const parsed = JSON.parse(event.data);
+    const bytes = new Uint8Array(event.data);
+    const parsed = msgpack.decode(bytes);
 
     Object.entries(parsed).forEach(([pairName, pair]) => {
         const allExchangesMap = Object.entries(pair);
 
-        allExchangesMap.forEach(([exchangeName, pairExchange]) => {
-            allExchangesMap.forEach(([otherExchangeName, otherPairExchange]) => {
+        allExchangesMap.forEach(([exchangeName, _pairExchange]) => {
+            const pairExchange = toPairExchange(_pairExchange);
+            allExchangesMap.forEach(([otherExchangeName, _otherPairExchange]) => {
+                const otherPairExchange = toPairExchange(_otherPairExchange);
                 if (otherExchangeName !== exchangeName) {
                     const highest = Math.max(pairExchange.price, otherPairExchange.price);
                     const lowest = Math.min(pairExchange.price, otherPairExchange.price);
                     const diffPercent = ((highest - lowest) / lowest) * 100.0;
-
                     const acceptableThreshold = (arbitrageThresholds[pairName] || 0.5) / riskCoef;
 
                     if (diffPercent >= acceptableThreshold) {
                         const firstReliability = getReliability(pairExchange);
                         const secondReliability = getReliability(pairExchange);
 
-                        if (firstReliability > reliabilityEnum.medium && secondReliability > reliabilityEnum.medium) {
-                            console.log('Arbitrage opportunity', pairName, `${exchangeName} (${pairExchange.price}) (${reliabilityViewEnum[firstReliability]})`, '-', `${otherExchangeName} (${otherPairExchange.price}) (${reliabilityViewEnum[secondReliability]})`);
+                        const isHighReliability = firstReliability > reliabilityEnum.medium && secondReliability > reliabilityEnum.medium;
+                        if (isHighReliability) {
+                            console.log(`Arbitrage opportunity (${pairName})`, `${exchangeName} (${pairExchange.price})`, '-', `${otherExchangeName} (${otherPairExchange.price})`, 'Diff percent', '-', Math.round(diffPercent * 100) / 100, '%');
                         }
                     }
                 }

@@ -67,19 +67,20 @@ impl WSServer {
         &self,
         exchange_price_map: &Arc<DashMap<String, HashMap<String, PairExchange>>>,
     ) {
-        let json = {
+        let resp_vect = {
             let map: HashMap<_, _> = exchange_price_map
                 .iter()
                 .map(|kv| (kv.key().clone(), kv.value().clone()))
                 .collect();
 
-            serde_json::to_string(&map).unwrap()
+            // serde_json::to_string(&map).unwrap()
+            rmp_serde::to_vec(&map).unwrap()
         };
 
         WS_SERVER_PACKAGES_SENT_COUNTER.inc();
         let clients = self.clients.lock().unwrap();
         for responder in clients.values() {
-            responder.send(Message::Text(json.clone()));
+            responder.send(Message::Binary(resp_vect.clone()));
         }
     }
 }
