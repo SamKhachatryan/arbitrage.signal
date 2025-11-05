@@ -12,10 +12,10 @@ use tokio_tungstenite::{
 };
 
 use crate::{
-    state::{AppControl, AppState},
-    ws_client::common::{self, ExchangeWSClient},
-    ws_server::WSServer,
+    define_prometheus_counter, health::prometheus::registry::METRIC_REGISTRY, state::{AppControl, AppState}, ws_client::common::{self, ExchangeWSClient}, ws_server::WSServer
 };
+
+define_prometheus_counter!(GATE_UPDATES_RECEIVED_COUNTER, "gate_updates_received_counter", "Gate: Updates Received Counter");
 
 async fn handle_ws_read(
     state: Arc<Mutex<AppState>>,
@@ -42,6 +42,7 @@ async fn handle_ws_read(
                     .and_then(|v| v.parse::<f64>().ok())
                 {
                     if let Some(i64_ts) = parsed.get("time_ms").and_then(|v| v.as_i64()) {
+                        GATE_UPDATES_RECEIVED_COUNTER.inc();
                         let safe_state = state.lock().expect("Failed to lock");
                         safe_state.update_price(&pair_name, "gate", price, i64_ts);
                         if let Some(ref server_instance) = *server {

@@ -6,29 +6,16 @@ use std::{
 };
 
 use dashmap::DashMap;
-use lazy_static::lazy_static;
-use prometheus::{Counter, IntGauge, Opts};
+use prometheus::{IntGauge, Opts};
 use simple_websockets::{Event, EventHub, Message, Responder};
 
-use crate::{health::prometheus::METRIC_REGISTRY, state::PairExchange};
+use crate::{define_prometheus_counter, health::prometheus::registry::METRIC_REGISTRY, state::PairExchange};
 
 pub struct WSServer {
     clients: Arc<Mutex<HashMap<u64, Responder>>>,
 }
 
-lazy_static! {
-    pub static ref WS_SERVER_PACKAGES_SENT_COUNTER: Counter = {
-        let opts = Opts::new(
-            "ws_server_packages_sent_counter",
-            "WS Server: Total number of packages sent",
-        );
-        let counter = Counter::with_opts(opts).expect("Failed to create counter");
-        METRIC_REGISTRY
-            .register(Box::new(counter.clone()))
-            .expect("Failed to register counter");
-        counter
-    };
-}
+define_prometheus_counter!(WS_SERVER_PACKAGES_SENT_COUNTER, "ws_server_packages_sent_counter", "WS Server: Total number of packages sent");
 
 impl WSServer {
     pub fn new() -> Self {

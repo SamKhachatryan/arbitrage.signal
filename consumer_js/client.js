@@ -58,7 +58,7 @@ const getReliability = (pairExchange) => {
     return reliabilityEnum.low;
 }
 
-const riskCoef = 6;
+const riskCoef = 4;
 
 const toPairExchange = (binary_arr) => ({
     price: binary_arr[0],

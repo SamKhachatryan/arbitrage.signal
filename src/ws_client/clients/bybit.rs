@@ -12,10 +12,10 @@ use tokio_tungstenite::{
 };
 
 use crate::{
-    state::{AppControl, AppState},
-    ws_client::common::{self, ExchangeWSClient},
-    ws_server::WSServer,
+    define_prometheus_counter, health::prometheus::registry::METRIC_REGISTRY, state::{AppControl, AppState}, ws_client::common::{self, ExchangeWSClient}, ws_server::WSServer
 };
+
+define_prometheus_counter!(BYBIT_UPDATES_RECEIVED_COUNTER, "bybit_updates_received_counter", "Bybit: Updates Received Counter");
 
 async fn handle_ws_read(
     state: Arc<Mutex<AppState>>,
@@ -43,6 +43,7 @@ async fn handle_ws_read(
                 {
                     if let Some(ts) = parsed.get("ts") {
                         if let Some(i64_ts) = ts.as_i64() {
+                            BYBIT_UPDATES_RECEIVED_COUNTER.inc();
                             let safe_state = state.lock().expect("Failed to lock");
                             safe_state.update_price(&pair_name, "bybit", price, i64_ts);
 

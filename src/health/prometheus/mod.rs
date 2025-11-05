@@ -1,12 +1,11 @@
+pub mod registry;
+pub mod counter;
+
 use actix_cors::Cors;
 use actix_web::{App, HttpResponse, HttpServer, get};
-use prometheus::{Encoder, Registry, TextEncoder};
+use prometheus::{Encoder, TextEncoder};
 
-use lazy_static::lazy_static;
-
-lazy_static! {
-    pub static ref METRIC_REGISTRY: Registry = Registry::new();
-}
+use crate::health::prometheus::registry::METRIC_REGISTRY;
 
 #[get("/health-metrics")]
 async fn metrics() -> impl actix_web::Responder {

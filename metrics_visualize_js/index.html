@@ -1,114 +1,217 @@
 <!DOCTYPE html>
-<html>
-
+<html lang="en">
 <head>
-    <title>Prometheus Metrics Viewer</title>
-    <script src="https://cdn.jsdelivr.net/npm/uplot@1.6.7/dist/uPlot.iife.min.js"></script>
-    <link href="https://unpkg.com/uplot/dist/uPlot.min.css" rel="stylesheet">
-    <style>
-        body {
-            font-family: sans-serif;
-            padding: 20px;
-        }
+  <meta charset="UTF-8" />
+  <title>Prometheus Metrics Viewer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdn.jsdelivr.net/npm/uplot@1.6.7/dist/uPlot.iife.min.js"></script>
+  <link href="https://unpkg.com/uplot/dist/uPlot.min.css" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0f172a;
+      --bg2: #111827;
+      --card: #1f2937;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --danger: #f43f5e;
+      --success: #22c55e;
+      --radius: 14px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: radial-gradient(circle at top, #1f2937 0, #0f172a 35%, #020617 80%);
+      color: var(--text);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      min-height: 100vh;
+      padding: 18px 18px 90px;
+    }
+    header {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+    h1 {
+      font-size: 1.4rem;
+      margin: 0;
+      display: flex;
+      gap: .5rem;
+      align-items: center;
+    }
+    .badge {
+      background: rgba(148, 163, 184, .12);
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: .7rem;
+    }
+    button {
+      background: var(--accent);
+      border: none;
+      color: #0f172a;
+      padding: 7px 14px;
+      border-radius: 999px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    button:active {
+      transform: translateY(1px);
+    }
+    .status {
+      font-size: .75rem;
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .status-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 999px;
+    }
+    .layout {
+      display: flex;
+    }
+    @media (max-width: 1100px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+    }
 
-        table {
-            border-collapse: collapse;
-            width: 100%;
-        }
+    #card-ws_server_packages_sent_counter {
+        width: 100%;
+    }
 
-        th,
-        td {
-            border: 1px solid #ccc;
-            padding: 8px;
-            text-align: left;
-        }
+    .cards-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 36px;
+      margin-bottom: 1rem;
+    }
+    .card {
+      width: calc(50% - 18px);
+      background: radial-gradient(circle at top, rgba(255,255,255,.05), rgba(15,23,42,.5));
+      border: 1px solid rgba(148, 163, 184, .15);
+      border-radius: var(--radius);
+      padding: .75rem .8rem .6rem;
+      display: flex;
+      flex-direction: column;
+      gap: .25rem;
+      min-height: 500px;
+    }
+    .card-title {
+      font-size: .72rem;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .card-value {
+      font-size: 1.35rem;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+    .card-sub {
+      font-size: .75rem;
+      color: var(--muted);
+    }
 
-        th {
-            background-color: #f4f4f4;
-        }
-    </style>
+    #card-ws_server_packages_sent_counter .mini-chart {
+        height: 500px;
+    }
+
+    .mini-chart {
+      margin-top: .45rem;
+      height: 120px;
+    }
+    /* table */
+    .table-wrapper {
+      width: 100%;
+      background: rgba(15,23,42,.15);
+      border: 1px solid rgba(148, 163, 184, .12);
+      border-radius: .9rem;
+      overflow: hidden;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .75rem;
+    }
+    thead {
+      background: rgba(15, 23, 42, .5);
+    }
+    th, td {
+      padding: .45rem .6rem;
+      border-bottom: 1px solid rgba(148, 163, 184, .05);
+      text-align: left;
+    }
+    th {
+      font-size: .7rem;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    tbody tr:hover {
+      background: rgba(148, 163, 184, .02);
+    }
+    .charts-panel {
+      background: radial-gradient(circle at top, rgba(15,23,42,.3), rgba(15,23,42,0));
+      border: 1px solid rgba(148, 163, 184, .12);
+      border-radius: .9rem;
+      padding: .5rem;
+      display: grid;
+      gap: .5rem;
+    }
+    .chart-block {
+      background: rgba(15,23,42, .65);
+      border-radius: .7rem;
+      overflow: hidden;
+      border: 1px solid rgba(148, 163, 184, .08);
+      padding: .25rem;
+    }
+    .chart-title {
+      font-size: .7rem;
+      padding: .35rem .35rem 0;
+      color: var(--muted);
+    }
+  </style>
 </head>
-
 <body>
-    <h1>Prometheus Metrics Viewer</h1>
-    <button onclick="loadMetrics()">Refresh</button>
-    <table id="metricsTable">
+  <header>
+    <div>
+      <h1>Prometheus Metrics Viewer <span class="badge">live</span></h1>
+      <div class="status" id="status">
+        <span class="status-dot" style="background: #64748b;"></span>
+        last fetch: —
+      </div>
+    </div>
+    <div style="display:flex; gap:.5rem; align-items:center;">
+      <button id="refreshBtn">Refresh now</button>
+      <span style="font-size:.6rem; color:var(--muted);">auto: 2s</span>
+    </div>
+  </header>
+
+  <div class="cards-grid" id="cardsGrid">
+    <!-- metric cards will be injected here -->
+  </div>
+
+  <div class="layout">
+    <div class="table-wrapper">
+      <table id="metricsTable">
         <thead>
-            <tr>
-                <th>Metric</th>
-                <th>Value</th>
-            </tr>
+          <tr>
+            <th>Metric</th>
+            <th>Value</th>
+          </tr>
         </thead>
         <tbody></tbody>
-    </table>
-    <div class="charts"></div>
+      </table>
+    </div>
+  </div>
 
-    <script>
-        const renderNaturalTimeValueChart = (name) => {
-            const startDate = Date.now();
-            const times = [0];
-            const values = [0];
-            const opts = {
-                title: name,
-                width: window.innerWidth / 2,
-                height: window.innerHeight / 2,
-                scales: {
-                    x: { time: false },
-                    y: { auto: true }
-                },
-                series: [
-                    {},
-                    {
-                        label: "Packages",
-                        stroke: "blue",
-                        points: { show: true }
-                    }
-                ]
-            };
-
-            const chart = new uPlot(opts, [times, values], document.getElementsByClassName("charts")[0]);
-            return {
-                pushValue: (value,) => {
-                    times.push(Math.floor((Date.now() - startDate) / 1000));
-                    values.push(value);
-                    chart.setData([times, values])
-                }
-            };
-        }
-
-        const cumulativeMetrics = {
-            'ws_server_packages_sent_counter': {
-                value: 0,
-                uptimeValue: 0,
-                chart: renderNaturalTimeValueChart('Packages sent per second')
-            }
-        };
-
-        setInterval(loadMetrics, 1000);
-
-        async function loadMetrics() {
-            const response = await fetch('http://localhost:4011/health-metrics');
-            const text = await response.text();
-            const lines = text.split('\n');
-            const tbody = document.querySelector('#metricsTable tbody');
-            tbody.innerHTML = '';
-
-            lines.forEach(line => {
-                if (line.startsWith('#') || line.trim() === '') return;
-                const [metric, value] = line.trim().split(/\s+/);
-                const row = document.createElement('tr');
-                row.innerHTML = `<td>${metric}</td><td>${value}</td>`;
-                tbody.appendChild(row);
-
-                if (cumulativeMetrics[metric]) {
-                    if (cumulativeMetrics[metric].value) cumulativeMetrics[metric].chart.pushValue(+value - cumulativeMetrics[metric].value);
-                    cumulativeMetrics[metric].value = +value;
-                }
-            });
-        }
-
-        loadMetrics();
-    </script>
+  <script src="./draw.js"></script>
 </body>
-
 </html>
