@@ -96,7 +96,7 @@ async fn handle_ws_read(
                 // other message types ignored
             }
             Err(e) => {
-                eprintln!("WebSocket read error: {}", e);
+                eprintln!("BITGET WebSocket read error: {}", e);
                 // stop the read loop on error; higher-level code can decide to reconnect
                 break;
             }
