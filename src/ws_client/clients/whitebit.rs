@@ -112,7 +112,7 @@ impl ExchangeWSClient for WhitebitWSClient {
             .await
             .unwrap();
 
-        tokio::spawn(common::send_ping_loop(write, "WhitebitW"));
+        tokio::spawn(common::send_ping_loop(write, "Whitebit"));
         tokio::spawn(handle_ws_read(state, server, read, pair_name));
     }
 }

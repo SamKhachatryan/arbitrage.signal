@@ -40,25 +40,31 @@ const arbitrageThresholds = {
 };
 
 const reliabilityEnum = {
-    low: 1,
-    medium: 2,
-    high: 3,
+    ultralow: 1,
+    low: 2,
+    medium: 3,
+    high: 4,
+    ultrahigh: 5,
 };
 
 const reliabilityViewEnum = {
+    [reliabilityEnum.ultralow]: 'ultralow',
     [reliabilityEnum.low]: 'low',
     [reliabilityEnum.medium]: 'medium',
     [reliabilityEnum.high]: 'high',
+    [reliabilityEnum.ultrahigh]: 'ultrahigh',
 };
 
 const getReliability = (pairExchange) => {
+    if (Date.now() - pairExchange.last_update_ts < 70 && pairExchange.latency < 50) return reliabilityEnum.ultrahigh;
     if (Date.now() - pairExchange.last_update_ts < 120 && pairExchange.latency < 100) return reliabilityEnum.high;
     if (Date.now() - pairExchange.last_update_ts < 220 && pairExchange.latency < 200) return reliabilityEnum.medium;
+    if (Date.now() - pairExchange.last_update_ts < 320 && pairExchange.latency < 300) return reliabilityEnum.low;
 
-    return reliabilityEnum.low;
+    return reliabilityEnum.ultralow;
 }
 
-const riskCoef = 3;
+const riskCoef = 4;
 
 const toPairExchange = (binary_arr) => ({
     price: binary_arr[0],
@@ -87,9 +93,10 @@ websocket.onmessage = (event) => {
 
                     if (diffPercent >= acceptableThreshold) {
                         const firstReliability = getReliability(pairExchange);
-                        const secondReliability = getReliability(pairExchange);
+                        const secondReliability = getReliability(otherPairExchange);
 
-                        const isHighReliability = firstReliability > reliabilityEnum.low && secondReliability > reliabilityEnum.low;
+                        const isHighReliability = firstReliability > reliabilityEnum.ultralow && secondReliability > reliabilityEnum.ultralow;
+
                         if (isHighReliability) {
                             console.log(`Arbitrage opportunity (${pairName})`, `${exchangeName} (${pairExchange.price})`, '-', `${otherExchangeName} (${otherPairExchange.price})`, 'Diff percent', '-', Math.round(diffPercent * 100) / 100, '%');
                         }
