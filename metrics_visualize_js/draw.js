@@ -1,7 +1,7 @@
     // CONFIG
     const METRICS_URL = 'http://localhost:4011/health-metrics';
     const POLL_MS = 2000;
-    const EXCHANGES = ['binance', 'bybit', 'okx', 'gate', 'whitebit'];
+    const EXCHANGES = ['binance', 'bybit', 'okx', 'gate', 'bitget', 'whitebit', 'crypto'];
 
     // We will explicitly track these:
     const TRACKED_METRICS = {

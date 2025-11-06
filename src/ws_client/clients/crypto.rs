@@ -13,10 +13,18 @@ use tokio_tungstenite::{
 };
 
 use crate::{
-    define_prometheus_counter,  health::prometheus::registry::METRIC_REGISTRY, state::{AppControl, AppState}, ws_client::common::{self, ExchangeWSClient}, ws_server::WSServer
+    define_prometheus_counter,
+    health::prometheus::registry::METRIC_REGISTRY,
+    state::{AppControl, AppState},
+    ws_client::common::{self, ExchangeWSClient},
+    ws_server::WSServer,
 };
 
-define_prometheus_counter!(OKX_UPDATES_RECEIVED_COUNTER, "okx_updates_received_counter", "Okx: Updates Received Counter");
+define_prometheus_counter!(
+    CRYPTO_UPDATES_RECEIVED_COUNTER,
+    "crypto_updates_received_counter",
+    "Crypto: Updates Received Counter"
+);
 
 async fn handle_ws_read(
     state: Arc<Mutex<AppState>>,
@@ -36,30 +44,27 @@ async fn handle_ws_read(
                     }
                 };
 
-                if let Some(data) = parsed.get("data").and_then(|data| data.get(0)) {
-                    match data
-                        .get("last")
-                        .and_then(|v| v.as_str())
-                        .and_then(|v| v.parse::<f64>().ok())
-                    {
-                        Some(price) => {
-                            if let Some(ts) = data.get("ts") {
-                                if let Some(ts_str) = ts.as_str() {
-                                    if let Ok(i64_ts) = ts_str.parse::<i64>() {
-                                        OKX_UPDATES_RECEIVED_COUNTER.inc();
-                                        let safe_state = state.lock().await;
-                                        safe_state.update_price(&pair_name, "okx", price, i64_ts);
+                let data = parsed
+                    .get("result")
+                    .and_then(|res| res.get("data"))
+                    .and_then(|data| data.get(0));
 
-                                        if let Some(ref server_instance) = *server {
-                                            server_instance.notify_price_change(
-                                                &safe_state.exchange_price_map,
-                                            );
-                                        }
+                if let Some(val) = data {
+                    if let Some(price_str) = val.get("k") {
+                        if let Some(price_str) = price_str.as_str() {
+                            if let Ok(price) = price_str.parse::<f64>() {
+                                if let Some(i64_ts) = val.get("t").and_then(|t| t.as_i64()) {
+                                    CRYPTO_UPDATES_RECEIVED_COUNTER.inc();
+                                    let safe_state = state.lock().await;
+                                    safe_state.update_price(&pair_name, "crypto", price, i64_ts);
+
+                                    if let Some(ref server_instance) = *server {
+                                        server_instance
+                                            .notify_price_change(&safe_state.exchange_price_map);
                                     }
                                 }
                             }
                         }
-                        None => eprintln!("Failed to parse price okx"),
                     }
                 }
             }
@@ -85,26 +90,28 @@ async fn handle_ws_read(
     }
 }
 
-pub struct OkxWSClient {}
+pub struct CryptoWSClient {}
 
-impl ExchangeWSClient for OkxWSClient {
+impl ExchangeWSClient for CryptoWSClient {
     async fn subscribe(
         state: Arc<Mutex<AppState>>,
         server: Arc<Option<WSServer>>,
         pair_name: String,
     ) {
-        let url = env::var("OKX_WS_URL").expect("OKX_WS_URL not set in .env");
+        let url = env::var("CRYPTO_WS_URL").expect("CRYPTO_WS_URL not set in .env");
         let (ws_stream, _) = connect_async(url).await.expect("Failed to connect");
 
         let (mut write, read) = ws_stream.split();
 
         let subscribe_msg = format!(
             r#"{{
-            "op": "subscribe",
-            "args": [{{ "channel": "{}", "instId": "{}" }}]
-        }}"#,
-            "tickers".to_string(),
-            pair_name.to_uppercase()
+                "method": "subscribe",
+                "params": {{
+                    "channels": ["ticker.{}"]
+                }},
+                "id": 1
+            }}"#,
+            pair_name.to_uppercase().replace("-", "_")
         );
 
         write
@@ -112,7 +119,7 @@ impl ExchangeWSClient for OkxWSClient {
             .await
             .unwrap();
 
-        tokio::spawn(common::send_ping_loop(write, "Okx"));
+        tokio::spawn(common::send_ping_loop(write, "Crypto"));
         tokio::spawn(handle_ws_read(state, server, read, pair_name));
     }
 }

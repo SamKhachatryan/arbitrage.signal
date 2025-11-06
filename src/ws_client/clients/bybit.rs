@@ -1,11 +1,12 @@
 use std::{
     env,
-    sync::{Arc, Mutex},
+    sync::{Arc},
 };
 
 use futures::SinkExt;
 use futures_util::StreamExt;
 use serde_json::Value;
+use tokio::sync::Mutex;
 use tokio_tungstenite::{
     connect_async,
     tungstenite::{self, Message},
@@ -44,7 +45,7 @@ async fn handle_ws_read(
                     if let Some(ts) = parsed.get("ts") {
                         if let Some(i64_ts) = ts.as_i64() {
                             BYBIT_UPDATES_RECEIVED_COUNTER.inc();
-                            let safe_state = state.lock().expect("Failed to lock");
+                            let safe_state = state.lock().await;
                             safe_state.update_price(&pair_name, "bybit", price, i64_ts);
 
                             if let Some(ref server_instance) = *server {
@@ -102,7 +103,7 @@ impl ExchangeWSClient for BybitWSClient {
             .await
             .unwrap();
 
-        tokio::spawn(common::send_ping_loop(write));
+        tokio::spawn(common::send_ping_loop(write, "Bybit"));
         tokio::spawn(handle_ws_read(state, server, read, pair_name));
     }
 }

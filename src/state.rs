@@ -1,11 +1,12 @@
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex},
+    sync::{Arc},
 };
 
 use chrono::{TimeZone, Utc, offset::LocalResult};
 use dashmap::DashMap;
 use serde::Serialize;
+use tokio::sync::Mutex;
 
 #[derive(Serialize, Clone)]
 pub struct PairExchange {

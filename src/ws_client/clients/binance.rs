@@ -1,10 +1,11 @@
 use std::{
     env,
-    sync::{Arc, Mutex},
+    sync::{Arc},
 };
 
 use futures_util::StreamExt;
 use serde_json::Value;
+use tokio::sync::Mutex;
 use tokio_tungstenite::{
     connect_async,
     tungstenite::{self, Message},
@@ -39,7 +40,7 @@ async fn handle_ws_read(
                         Ok(price) => {
                             if let Some(ts) = parsed.get("T") {
                                 if let Some(i64_ts) = ts.as_i64() {
-                                    let safe_state = state.lock().expect("Failed to lock");
+                                    let safe_state = state.lock().await;
                                     BINANCE_UPDATES_RECEIVED_COUNTER.inc();
                                     safe_state.update_price(&pair_name, "binance", price, i64_ts);
 
@@ -95,7 +96,7 @@ impl ExchangeWSClient for BinanceWSClient {
 
         let (write, read) = ws_stream.split();
 
-        tokio::spawn(common::send_ping_loop(write));
+        tokio::spawn(common::send_ping_loop(write, "Binance"));
         tokio::spawn(handle_ws_read(state, server, read, pair_name));
     }
 }

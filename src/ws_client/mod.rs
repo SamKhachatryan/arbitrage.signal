@@ -2,7 +2,7 @@ mod clients;
 mod common;
 mod subscribe_list;
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc};
 
 // BEGIN FOR MACRO
 use crate::subscribe_list;
@@ -11,12 +11,19 @@ use crate::{
     state::AppState,
     ws_client::{
         clients::{
-            binance::BinanceWSClient, bybit::BybitWSClient, gate::GateWSClient, okx::OkxWSClient, whitebit::WhitebitWSClient
+            binance::BinanceWSClient,
+            bybit::BybitWSClient,
+            gate::GateWSClient,
+            okx::OkxWSClient,
+            whitebit::WhitebitWSClient,
+            bitget::BitgetWSClient,
+            crypto::CryptoWSClient,
         },
         common::ExchangeWSClient,
     },
 };
 use futures_util::FutureExt;
+use tokio::sync::Mutex;
 // END FOR MACRO
 
 pub async fn subscribe_to_all_exchanges(
@@ -51,7 +58,7 @@ pub async fn subscribe_to_all_exchanges(
             state,
             server,
             each,
-            [BinanceWSClient, OkxWSClient, GateWSClient, BybitWSClient, WhitebitWSClient]
+            [BinanceWSClient, OkxWSClient, GateWSClient, BybitWSClient, WhitebitWSClient, BitgetWSClient, CryptoWSClient]
         )
     }
 }
