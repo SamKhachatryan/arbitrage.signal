@@ -1,7 +1,4 @@
-use std::{
-    env,
-    sync::{Arc},
-};
+use std::{env, sync::Arc};
 
 use futures::SinkExt;
 use futures_util::StreamExt;
@@ -13,17 +10,24 @@ use tokio_tungstenite::{
 };
 
 use crate::{
-    define_prometheus_counter, health::prometheus::registry::METRIC_REGISTRY, state::{AppControl, AppState}, ws_client::common::{self, ExchangeWSClient}, ws_server::WSServer
+    define_prometheus_counter,
+    health::prometheus::registry::METRIC_REGISTRY,
+    state::{AppControl, AppState},
+    ws_client::common::{self, ExchangeWSClient, ExchangeWSClientPairList},
+    ws_server::WSServer,
 };
 
-define_prometheus_counter!(BYBIT_UPDATES_RECEIVED_COUNTER, "bybit_updates_received_counter", "Bybit: Updates Received Counter");
+define_prometheus_counter!(
+    BYBIT_UPDATES_RECEIVED_COUNTER,
+    "bybit_updates_received_counter",
+    "Bybit: Updates Received Counter"
+);
 
 async fn handle_ws_read(
     state: Arc<Mutex<AppState>>,
     server: Arc<Option<WSServer>>,
     mut read: impl StreamExt<Item = Result<Message, tungstenite::Error>> + Unpin,
     //ui: Arc<Mutex<AppState>>,
-    pair_name: String,
 ) {
     while let Some(msg_result) = read.next().await {
         match msg_result {
@@ -46,7 +50,7 @@ async fn handle_ws_read(
                         if let Some(i64_ts) = ts.as_i64() {
                             BYBIT_UPDATES_RECEIVED_COUNTER.inc();
                             let safe_state = state.lock().await;
-                            safe_state.update_price(&pair_name, "bybit", price, i64_ts);
+                            safe_state.update_price("btc-usdt", "bybit", price, i64_ts);
 
                             if let Some(ref server_instance) = *server {
                                 server_instance.notify_price_change(&safe_state.exchange_price_map);
@@ -79,31 +83,33 @@ async fn handle_ws_read(
 
 pub struct BybitWSClient {}
 
-impl ExchangeWSClient for BybitWSClient {
-    async fn subscribe(
+impl ExchangeWSClientPairList for BybitWSClient {
+    async fn subscribe_list(
         state: Arc<Mutex<AppState>>,
         server: Arc<Option<WSServer>>,
-        pair_name: String,
+        pair_names: Vec<String>,
     ) {
         let url = env::var("BYBIT_WS_URL").expect("BYBIT_WS_URL not set in .env");
         let (ws_stream, _) = connect_async(url).await.expect("Failed to connect");
 
         let (mut write, read) = ws_stream.split();
 
-        let subscribe_msg = format!(
-            r#"{{
+        for pair_name in pair_names {
+            let subscribe_msg = format!(
+                r#"{{
             "op": "subscribe",
             "args": ["tickers.{}"]
         }}"#,
-            pair_name.to_uppercase().replace("-", "")
-        );
+                pair_name.to_uppercase().replace("-", "")
+            );
 
-        write
-            .send(Message::Text(subscribe_msg.to_string().into()))
-            .await
-            .unwrap();
+            write
+                .send(Message::Text(subscribe_msg.to_string().into()))
+                .await
+                .unwrap();
+        }
 
         tokio::spawn(common::send_ping_loop(write, "Bybit"));
-        tokio::spawn(handle_ws_read(state, server, read, pair_name));
+        tokio::spawn(handle_ws_read(state, server, read));
     }
 }

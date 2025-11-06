@@ -7,6 +7,7 @@ use std::sync::{Arc};
 use crate::state::PAIR_NAMES;
 // BEGIN FOR MACRO
 use crate::subscribe_list;
+use crate::ws_client::common::ExchangeWSClientPairList;
 use crate::ws_server::WSServer;
 use crate::{
     state::AppState,
@@ -36,7 +37,11 @@ pub async fn subscribe_to_all_exchanges(
             state,
             server,
             each,
-            [BinanceWSClient, OkxWSClient, GateWSClient, BybitWSClient, WhitebitWSClient, BitgetWSClient, CryptoWSClient]
+            [BinanceWSClient, OkxWSClient, GateWSClient, WhitebitWSClient, BitgetWSClient, CryptoWSClient]
         )
     }
+
+    let cloned = Arc::clone(&state);
+    let cloned_server = Arc::clone(&server);
+    BybitWSClient::subscribe_list(cloned, cloned_server, PAIR_NAMES.iter().map(|s| s.to_string()).collect()).await;
 }

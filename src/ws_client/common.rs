@@ -8,7 +8,10 @@ use crate::{state::AppState, ws_server::WSServer};
 
 pub trait ExchangeWSClient {
     async fn subscribe(state: Arc<Mutex<AppState>>, server: Arc<Option<WSServer>>, pair: String);
-    // async fn subscribe_list(state: Arc<Mutex<AppState>>, server: Arc<Option<WSServer>>, pairs: Vec<String>);
+}
+
+pub trait ExchangeWSClientPairList {
+    async fn subscribe_list(state: Arc<Mutex<AppState>>, server: Arc<Option<WSServer>>, pairs: Vec<String>);
 }
 
 pub async fn send_ping_loop(mut write: impl SinkExt<Message> + Unpin, exchange_name: &str) {
