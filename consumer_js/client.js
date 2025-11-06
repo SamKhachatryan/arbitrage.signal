@@ -58,7 +58,7 @@ const getReliability = (pairExchange) => {
     return reliabilityEnum.low;
 }
 
-const riskCoef = 2;
+const riskCoef = 3;
 
 const toPairExchange = (binary_arr) => ({
     price: binary_arr[0],
@@ -75,6 +75,7 @@ websocket.onmessage = (event) => {
         const allExchangesMap = Object.entries(pair);
 
         allExchangesMap.forEach(([exchangeName, _pairExchange]) => {
+
             const pairExchange = toPairExchange(_pairExchange);
             allExchangesMap.forEach(([otherExchangeName, _otherPairExchange]) => {
                 const otherPairExchange = toPairExchange(_otherPairExchange);
@@ -88,7 +89,7 @@ websocket.onmessage = (event) => {
                         const firstReliability = getReliability(pairExchange);
                         const secondReliability = getReliability(pairExchange);
 
-                        const isHighReliability = firstReliability > reliabilityEnum.medium && secondReliability > reliabilityEnum.medium;
+                        const isHighReliability = firstReliability > reliabilityEnum.low && secondReliability > reliabilityEnum.low;
                         if (isHighReliability) {
                             console.log(`Arbitrage opportunity (${pairName})`, `${exchangeName} (${pairExchange.price})`, '-', `${otherExchangeName} (${otherPairExchange.price})`, 'Diff percent', '-', Math.round(diffPercent * 100) / 100, '%');
                         }

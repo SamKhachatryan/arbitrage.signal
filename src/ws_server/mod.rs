@@ -9,13 +9,19 @@ use dashmap::DashMap;
 use prometheus::{IntGauge, Opts};
 use simple_websockets::{Event, EventHub, Message, Responder};
 
-use crate::{define_prometheus_counter, health::prometheus::registry::METRIC_REGISTRY, state::PairExchange};
+use crate::{
+    define_prometheus_counter, health::prometheus::registry::METRIC_REGISTRY, state::PairExchange,
+};
 
 pub struct WSServer {
     clients: Arc<Mutex<HashMap<u64, Responder>>>,
 }
 
-define_prometheus_counter!(WS_SERVER_PACKAGES_SENT_COUNTER, "ws_server_packages_sent_counter", "WS Server: Total number of packages sent");
+define_prometheus_counter!(
+    WS_SERVER_PACKAGES_SENT_COUNTER,
+    "ws_server_packages_sent_counter",
+    "WS Server: Total number of packages sent"
+);
 
 impl WSServer {
     pub fn new() -> Self {
@@ -52,12 +58,18 @@ impl WSServer {
 
     pub fn notify_price_change(
         &self,
-        exchange_price_map: &Arc<DashMap<String, HashMap<String, PairExchange>>>,
+        exchange_price_map: &Arc<HashMap<String, DashMap<String, PairExchange>>>,
     ) {
         let resp_vect = {
             let map: HashMap<_, _> = exchange_price_map
                 .iter()
-                .map(|kv| (kv.key().clone(), kv.value().clone()))
+                .map(|(key, value)| {
+                    let inner_map: HashMap<_, _> = value
+                        .iter()
+                        .map(|entry| (entry.key().clone(), entry.value().clone()))
+                        .collect();
+                    (key.clone(), inner_map)
+                })
                 .collect();
 
             // serde_json::to_string(&map).unwrap()

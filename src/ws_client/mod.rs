@@ -4,6 +4,7 @@ mod subscribe_list;
 
 use std::sync::{Arc};
 
+use crate::state::PAIR_NAMES;
 // BEGIN FOR MACRO
 use crate::subscribe_list;
 use crate::ws_server::WSServer;
@@ -30,30 +31,7 @@ pub async fn subscribe_to_all_exchanges(
     state: &Arc<Mutex<AppState>>,
     server: Arc<Option<WSServer>>,
 ) {
-    let pair_names = vec![
-        "btc-usdt",
-        "eth-usdt",
-        "sol-usdt",
-        "doge-usdt",
-        "xrp-usdt",
-        "ton-usdt",
-        "ada-usdt",
-        "link-usdt",
-        "arb-usdt",
-        "op-usdt",
-        "ltc-usdt",
-        "bch-usdt",
-        "uni-usdt",
-        "avax-usdt",
-        "apt-usdt",
-        "near-usdt",
-        "matic-usdt",
-        "pepe-usdt",
-        "floki-usdt",
-        "sui-usdt",
-    ];
-
-    for each in pair_names {
+    for each in PAIR_NAMES.iter() {
         subscribe_list!(
             state,
             server,

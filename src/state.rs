@@ -1,12 +1,35 @@
-use std::{
-    collections::HashMap,
-    sync::{Arc},
-};
+use std::{collections::HashMap, sync::Arc};
 
 use chrono::{TimeZone, Utc, offset::LocalResult};
 use dashmap::DashMap;
+use lazy_static::lazy_static;
 use serde::Serialize;
 use tokio::sync::Mutex;
+
+lazy_static! {
+    pub static ref PAIR_NAMES: Vec<&'static str> = vec![
+        "btc-usdt",
+        "eth-usdt",
+        "sol-usdt",
+        "doge-usdt",
+        "xrp-usdt",
+        "ton-usdt",
+        "ada-usdt",
+        "link-usdt",
+        "arb-usdt",
+        "op-usdt",
+        "ltc-usdt",
+        "bch-usdt",
+        "uni-usdt",
+        "avax-usdt",
+        "apt-usdt",
+        "near-usdt",
+        "matic-usdt",
+        "pepe-usdt",
+        "floki-usdt",
+        "sui-usdt",
+    ];
+}
 
 #[derive(Serialize, Clone)]
 pub struct PairExchange {
@@ -16,7 +39,7 @@ pub struct PairExchange {
 }
 
 pub struct AppState {
-    pub exchange_price_map: Arc<DashMap<String, HashMap<String, PairExchange>>>,
+    pub exchange_price_map: Arc<HashMap<String, DashMap<String, PairExchange>>>,
 }
 
 pub trait AppControl {
@@ -25,30 +48,33 @@ pub trait AppControl {
 
 impl AppControl for AppState {
     fn update_price(&self, pair: &str, exchange: &str, price: f64, ts: i64) {
-        let mut exchange_map = self
-            .exchange_price_map
-            .entry(pair.to_string())
-            .or_insert_with(HashMap::new);
-
-        let now = Utc::now();
-        let ts_datetime_result = Utc.timestamp_millis_opt(ts);
-
-        if let LocalResult::Single(ts_datetime) = ts_datetime_result {
-            let diff_ms = (now - ts_datetime).num_milliseconds() as i32;
-            exchange_map.insert(
-                exchange.to_string(),
-                PairExchange {
-                    price: price,
-                    latency: diff_ms.max(0),
-                    last_update_ts: ts,
-                },
-            );
+        if let Some(exchange_map) = self.exchange_price_map.get(pair) {
+            let now = Utc::now();
+            if let LocalResult::Single(ts_datetime) = Utc.timestamp_millis_opt(ts) {
+                let diff_ms = (now - ts_datetime).num_milliseconds() as i32;
+                exchange_map.insert(
+                    exchange.to_string(),
+                    PairExchange {
+                        price,
+                        latency: diff_ms.max(0),
+                        last_update_ts: ts,
+                    },
+                );
+            }
+        } else {
+            eprintln!("Unknown pair: {}", pair);
         }
     }
 }
 
 pub fn init_app_state() -> Arc<Mutex<AppState>> {
+    let mut map: HashMap<String, DashMap<String, PairExchange>> = HashMap::new();
+
+    for pair_name in PAIR_NAMES.iter() {
+        map.insert(pair_name.to_string(), DashMap::new());
+    }
+
     Arc::new(Mutex::new(AppState {
-        exchange_price_map: Arc::new(DashMap::new()),
+        exchange_price_map: Arc::new(map),
     }))
 }
