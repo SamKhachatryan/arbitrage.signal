@@ -1,9 +1,9 @@
-use std::{env, sync::Arc};
+use std::{env, sync::Arc, time::Duration};
 
 use futures::SinkExt;
 use futures_util::StreamExt;
 use serde_json::Value;
-use tokio::sync::Mutex;
+use tokio::{sync::Mutex, time::sleep};
 use tokio_tungstenite::{
     connect_async,
     tungstenite::{self, Message},
@@ -27,7 +27,7 @@ async fn handle_ws_read(
     state: Arc<Mutex<AppState>>,
     server: Arc<Option<WSServer>>,
     mut read: impl StreamExt<Item = Result<Message, tungstenite::Error>> + Unpin,
-    mut write: Arc<Mutex<impl SinkExt<Message> + Unpin>>,
+    write: Arc<Mutex<impl SinkExt<Message> + Unpin>>,
     //ui: Arc<Mutex<AppState>>,
     pair_name: String,
 ) {
@@ -52,7 +52,10 @@ async fn handle_ws_read(
                                 }}"#,
                                 id
                             );
-                            let _ = write.lock().await.send(Message::Text(subscribe_msg.to_string().into()));
+                            let _ = write
+                                .lock()
+                                .await
+                                .send(Message::Text(subscribe_msg.to_string().into()));
                             continue;
                         }
                     }
@@ -85,13 +88,17 @@ async fn handle_ws_read(
             Ok(Message::Binary(_)) => {
                 // ignore binary messages
             }
-            Ok(Message::Close(frame)) => {
-                eprintln!("CRYPTO WebSocket closed: {:?}", frame);
-                panic!();
+            Ok(Message::Close(Some(frame))) => {
+                eprintln!(
+                    "CRYPTO Closed: code = {:?}, reason = {:?}",
+                    frame.code, frame.reason
+                );
                 break;
             }
-            Ok(Message::Ping(_)) | Ok(Message::Pong(_)) => {
-                // ignore pings/pongs for now
+            Ok(Message::Ping(message)) => {
+                if let Err(_e) = write.lock().await.send(Message::Pong(message)).await {
+                    eprintln!("Failed to send pong");
+                }
             }
             Ok(_) => {
                 // other message types ignored
@@ -114,29 +121,53 @@ impl ExchangeWSClient for CryptoWSClient {
         pair_name: String,
     ) {
         let url = env::var("CRYPTO_WS_URL").expect("CRYPTO_WS_URL not set in .env");
-        let (ws_stream, _) = connect_async(url).await.expect("Failed to connect");
+        let state = state.clone();
+        let server = server.clone();
+        let pair_name = pair_name.clone();
 
-        let (mut write, read) = ws_stream.split();
+        tokio::spawn(async move {
+            loop {
+                match connect_async(&url).await {
+                    Ok((ws_stream, _)) => {
+                        let (write, read) = ws_stream.split();
+                        let write_arc = Arc::new(Mutex::new(write));
 
-        let subscribe_msg = format!(
-            r#"{{
-                "method": "subscribe",
-                "params": {{
-                    "channels": ["ticker.{}"]
-                }},
-                "id": 1
-            }}"#,
-            pair_name.to_uppercase().replace("-", "_")
-        );
+                        sleep(Duration::from_secs(5)).await;
 
-        write
-            .send(Message::Text(subscribe_msg.to_string().into()))
-            .await
-            .unwrap();
+                        let subscribe_msg = format!(
+                            r#"{{ "method": "subscribe", "params": {{ "channels": ["ticker.{}"] }}, "id": 1 }}"#,
+                            pair_name.to_uppercase().replace("-", "_")
+                        );
 
-        let write_arc = Arc::new(Mutex::new(write));
+                        if let Err(e) = write_arc
+                            .clone()
+                            .lock()
+                            .await
+                            .send(Message::Text(subscribe_msg.into()))
+                            .await
+                        {
+                            eprintln!("Failed to send subscribe: {}", e);
+                            continue;
+                        }
 
-        tokio::spawn(common::send_ping_loop_async(write_arc.clone(), "Crypto"));
-        tokio::spawn(handle_ws_read(state, server, read, write_arc.clone(), pair_name));
+                        tokio::spawn(common::send_ping_loop_async(write_arc.clone(), "Crypto"));
+
+                        let _ = handle_ws_read(
+                            state.clone(),
+                            server.clone(),
+                            read,
+                            write_arc.clone(),
+                            pair_name.clone(),
+                        )
+                        .await;
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to connect: {}", e);
+                    }
+                }
+
+                sleep(Duration::from_secs(2)).await;
+            }
+        });
     }
 }

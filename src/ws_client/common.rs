@@ -1,7 +1,10 @@
-use std::sync::{Arc};
+use std::sync::Arc;
 
 use futures::SinkExt;
-use tokio::{sync::Mutex, time::{Duration, interval}};
+use tokio::{
+    sync::Mutex,
+    time::{Duration, interval},
+};
 use tokio_tungstenite::tungstenite::Message;
 
 use crate::{state::AppState, ws_server::WSServer};
@@ -18,21 +21,26 @@ pub async fn send_ping_loop(mut write: impl SinkExt<Message> + Unpin, exchange_n
         ticker.tick().await;
 
         if let Err(_e) = write.send(Message::Ping(vec![].into())).await {
-            eprintln!("Failed to send ping: {}", exchange_name);
+            eprintln!("[{}] Failed to send ping", exchange_name);
             break;
         }
     }
 }
 
-pub async fn send_ping_loop_async(mut write: Arc<Mutex<impl SinkExt<Message> + Unpin>>, exchange_name: &str) {
-    let mut ticker = interval(Duration::from_secs(30));
+pub async fn send_ping_loop_async(
+    write: Arc<Mutex<impl SinkExt<Message> + Unpin>>,
+    exchange_name: &str,
+) {
+    let mut ticker = interval(Duration::from_secs(20));
 
     loop {
         ticker.tick().await;
 
         if let Err(_e) = write.lock().await.send(Message::Ping(vec![].into())).await {
-            eprintln!("Failed to send ping: {}", exchange_name);
+            eprintln!("[{}] Failed to send ping", exchange_name);
             break;
         }
     }
 }
+
+

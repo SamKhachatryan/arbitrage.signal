@@ -1,7 +1,4 @@
-use std::{
-    env,
-    sync::{Arc},
-};
+use std::{env, sync::Arc};
 
 use futures::SinkExt;
 use futures_util::StreamExt;
@@ -13,10 +10,18 @@ use tokio_tungstenite::{
 };
 
 use crate::{
-    define_prometheus_counter, health::prometheus::registry::METRIC_REGISTRY, state::{AppControl, AppState}, ws_client::common::{self, ExchangeWSClient}, ws_server::WSServer
+    define_prometheus_counter,
+    health::prometheus::registry::METRIC_REGISTRY,
+    state::{AppControl, AppState},
+    ws_client::common::{self, ExchangeWSClient},
+    ws_server::WSServer,
 };
 
-define_prometheus_counter!(BYBIT_UPDATES_RECEIVED_COUNTER, "bybit_updates_received_counter", "Bybit: Updates Received Counter");
+define_prometheus_counter!(
+    BYBIT_UPDATES_RECEIVED_COUNTER,
+    "bybit_updates_received_counter",
+    "Bybit: Updates Received Counter"
+);
 
 async fn handle_ws_read(
     state: Arc<Mutex<AppState>>,
