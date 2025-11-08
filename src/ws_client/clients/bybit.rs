@@ -1,19 +1,18 @@
-use std::{env, sync::Arc};
+use std::sync::Arc;
 
+use async_trait::async_trait;
 use futures::SinkExt;
 use futures_util::StreamExt;
 use serde_json::Value;
-use tokio::sync::Mutex;
+use tokio::{net::TcpStream, sync::Mutex};
 use tokio_tungstenite::{
-    connect_async,
-    tungstenite::{self, Message},
+    MaybeTlsStream, WebSocketStream, tungstenite::{self, Message}
 };
 
 use crate::{
     define_prometheus_counter,
-    health::prometheus::registry::METRIC_REGISTRY,
     state::{AppControl, AppState},
-    ws_client::common::{self, ExchangeWSClient},
+    ws_client::{clients::interface::ExchangeWSSession, common::{self}},
     ws_server::WSServer,
 };
 
@@ -24,10 +23,10 @@ define_prometheus_counter!(
 );
 
 async fn handle_ws_read(
-    state: Arc<Mutex<AppState>>,
+    state: Arc<std::sync::Mutex<AppState>>,
     server: Arc<Option<WSServer>>,
     mut read: impl StreamExt<Item = Result<Message, tungstenite::Error>> + Unpin,
-    //ui: Arc<Mutex<AppState>>,
+    write: Arc<Mutex<impl SinkExt<Message> + Unpin>>,
     pair_name: String,
 ) {
     while let Some(msg_result) = read.next().await {
@@ -50,7 +49,7 @@ async fn handle_ws_read(
                     if let Some(ts) = parsed.get("ts") {
                         if let Some(i64_ts) = ts.as_i64() {
                             BYBIT_UPDATES_RECEIVED_COUNTER.inc();
-                            let safe_state = state.lock().await;
+                            let safe_state = state.lock().expect("Failed to lock");
                             safe_state.update_price(&pair_name, "bybit", price, i64_ts);
 
                             if let Some(ref server_instance) = *server {
@@ -67,8 +66,10 @@ async fn handle_ws_read(
                 eprintln!("BYBIT WebSocket closed: {:?}", frame);
                 break;
             }
-            Ok(Message::Ping(_)) | Ok(Message::Pong(_)) => {
-                // ignore pings/pongs for now
+            Ok(Message::Ping(message)) => {
+                if let Err(_e) = write.lock().await.send(Message::Pong(message)).await {
+                    eprintln!("Failed to send pong");
+                }
             }
             Ok(_) => {
                 // other message types ignored
@@ -82,17 +83,17 @@ async fn handle_ws_read(
     }
 }
 
-pub struct BybitWSClient {}
+pub struct BybitExchangeWSSession {}
 
-impl ExchangeWSClient for BybitWSClient {
-    async fn subscribe(
-        state: Arc<Mutex<AppState>>,
+#[async_trait]
+impl ExchangeWSSession for BybitExchangeWSSession {
+    async fn handle_session(
+        &self,
+        ws_stream: WebSocketStream<MaybeTlsStream<TcpStream>>,
+        state: Arc<std::sync::Mutex<AppState>>,
         server: Arc<Option<WSServer>>,
         pair_name: String,
     ) {
-        let url = env::var("BYBIT_WS_URL").expect("BYBIT_WS_URL not set in .env");
-        let (ws_stream, _) = connect_async(url).await.expect("Failed to connect");
-
         let (mut write, read) = ws_stream.split();
 
         let subscribe_msg = format!(
@@ -103,12 +104,25 @@ impl ExchangeWSClient for BybitWSClient {
             pair_name.to_uppercase().replace("-", "")
         );
 
-        write
-            .send(Message::Text(subscribe_msg.to_string().into()))
-            .await
-            .unwrap();
+        if let Err(e) = write.send(Message::Text(subscribe_msg.to_string().into())).await {
+            eprintln!("BYBIT: Failed to send subscription message: {}", e);
+            return;
+        }
 
-        tokio::spawn(common::send_ping_loop(write, "Bybit"));
-        tokio::spawn(handle_ws_read(state, server, read, pair_name));
+        let write_arc = Arc::new(Mutex::new(write));
+
+        // Spawn both tasks and wait for either to complete
+        let ping_handle = tokio::spawn(common::send_ping_loop(write_arc.clone(), "Bybit"));
+        let read_handle = tokio::spawn(handle_ws_read(state, server, read, write_arc.clone(), pair_name));
+
+        // Wait for either task to complete (whichever finishes first indicates connection is done)
+        tokio::select! {
+            _ = ping_handle => {
+                eprintln!("BYBIT: Ping loop ended");
+            }
+            _ = read_handle => {
+                eprintln!("BYBIT: Read loop ended");
+            }
+        }
     }
 }

@@ -10,7 +10,7 @@ use prometheus::{IntGauge, Opts};
 use simple_websockets::{Event, EventHub, Message, Responder};
 
 use crate::{
-    define_prometheus_counter, health::prometheus::registry::METRIC_REGISTRY, state::PairExchange,
+    define_prometheus_counter, state::PairExchange,
 };
 
 pub struct WSServer {

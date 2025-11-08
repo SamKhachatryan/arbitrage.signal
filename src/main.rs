@@ -3,6 +3,7 @@ mod health;
 mod state;
 mod ws_client;
 mod ws_server;
+mod tls;
 
 use std::sync::Arc;
 
@@ -21,9 +22,6 @@ async fn main() -> std::io::Result<()> {
     let state = init_app_state();
 
     ws_client::subscribe_to_all_exchanges(&state, client_server).await;
-
-    // let cloned_state = Arc::clone(&state);
-    // eframe_app::spawn_eframe_ui(cloned_state.clone());s
 
     let http_server = init_prometheus_server();
 

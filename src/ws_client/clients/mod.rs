@@ -5,3 +5,4 @@ pub mod bybit;
 pub mod whitebit;
 pub mod bitget;
 pub mod crypto;
+pub mod interface;

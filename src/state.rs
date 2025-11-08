@@ -1,10 +1,9 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::{Arc, Mutex}};
 
 use chrono::{TimeZone, Utc, offset::LocalResult};
 use dashmap::DashMap;
 use lazy_static::lazy_static;
 use serde::Serialize;
-use tokio::sync::Mutex;
 
 lazy_static! {
     pub static ref PAIR_NAMES: Vec<&'static str> = vec![

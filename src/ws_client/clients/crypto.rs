@@ -1,19 +1,19 @@
-use std::{env, sync::Arc, time::Duration};
+use std::{sync::{Arc}, time::Duration};
 
+use async_trait::async_trait;
 use futures::SinkExt;
 use futures_util::StreamExt;
 use serde_json::Value;
-use tokio::{sync::Mutex, time::sleep};
+use tokio::{net::TcpStream, sync::Mutex, time::sleep};
 use tokio_tungstenite::{
-    connect_async,
+    MaybeTlsStream, WebSocketStream,
     tungstenite::{self, Message},
 };
 
 use crate::{
     define_prometheus_counter,
-    health::prometheus::registry::METRIC_REGISTRY,
     state::{AppControl, AppState},
-    ws_client::common::{self, ExchangeWSClient},
+    ws_client::{clients::interface::ExchangeWSSession, common},
     ws_server::WSServer,
 };
 
@@ -24,11 +24,10 @@ define_prometheus_counter!(
 );
 
 async fn handle_ws_read(
-    state: Arc<Mutex<AppState>>,
+    state: Arc<std::sync::Mutex<AppState>>,
     server: Arc<Option<WSServer>>,
     mut read: impl StreamExt<Item = Result<Message, tungstenite::Error>> + Unpin,
     write: Arc<Mutex<impl SinkExt<Message> + Unpin>>,
-    //ui: Arc<Mutex<AppState>>,
     pair_name: String,
 ) {
     while let Some(msg_result) = read.next().await {
@@ -72,7 +71,7 @@ async fn handle_ws_read(
                             if let Ok(price) = price_str.parse::<f64>() {
                                 if let Some(i64_ts) = val.get("t").and_then(|t| t.as_i64()) {
                                     CRYPTO_UPDATES_RECEIVED_COUNTER.inc();
-                                    let safe_state = state.lock().await;
+                                    let safe_state = state.lock().expect("Failed to lock");
                                     safe_state.update_price(&pair_name, "crypto", price, i64_ts);
 
                                     if let Some(ref server_instance) = *server {
@@ -112,62 +111,56 @@ async fn handle_ws_read(
     }
 }
 
-pub struct CryptoWSClient {}
+pub struct CryptoExchangeWSSession {}
 
-impl ExchangeWSClient for CryptoWSClient {
-    async fn subscribe(
-        state: Arc<Mutex<AppState>>,
+#[async_trait]
+impl ExchangeWSSession for CryptoExchangeWSSession {
+    async fn handle_session(
+        &self,
+        ws_stream: WebSocketStream<MaybeTlsStream<TcpStream>>,
+        state: Arc<std::sync::Mutex<AppState>>,
         server: Arc<Option<WSServer>>,
         pair_name: String,
     ) {
-        let url = env::var("CRYPTO_WS_URL").expect("CRYPTO_WS_URL not set in .env");
-        let state = state.clone();
-        let server = server.clone();
-        let pair_name = pair_name.clone();
+        let (write, read) = ws_stream.split();
+        let write_arc = Arc::new(Mutex::new(write));
 
-        tokio::spawn(async move {
-            loop {
-                match connect_async(&url).await {
-                    Ok((ws_stream, _)) => {
-                        let (write, read) = ws_stream.split();
-                        let write_arc = Arc::new(Mutex::new(write));
+        sleep(Duration::from_secs(5)).await;
 
-                        sleep(Duration::from_secs(5)).await;
+        let subscribe_msg = format!(
+            r#"{{ "method": "subscribe", "params": {{ "channels": ["ticker.{}"] }}, "id": 1 }}"#,
+            pair_name.to_uppercase().replace("-", "_")
+        );
 
-                        let subscribe_msg = format!(
-                            r#"{{ "method": "subscribe", "params": {{ "channels": ["ticker.{}"] }}, "id": 1 }}"#,
-                            pair_name.to_uppercase().replace("-", "_")
-                        );
+        if let Err(e) = write_arc
+            .clone()
+            .lock()
+            .await
+            .send(Message::Text(subscribe_msg.into()))
+            .await
+        {
+            eprintln!("CRYPTO: Failed to send subscribe: {}", e);
+            return;
+        }
 
-                        if let Err(e) = write_arc
-                            .clone()
-                            .lock()
-                            .await
-                            .send(Message::Text(subscribe_msg.into()))
-                            .await
-                        {
-                            eprintln!("Failed to send subscribe: {}", e);
-                            continue;
-                        }
+        // Spawn both tasks and wait for either to complete
+        let ping_handle = tokio::spawn(common::send_ping_loop(write_arc.clone(), "Crypto"));
+        let read_handle = tokio::spawn(handle_ws_read(
+            state.clone(),
+            server.clone(),
+            read,
+            write_arc.clone(),
+            pair_name.clone(),
+        ));
 
-                        tokio::spawn(common::send_ping_loop_async(write_arc.clone(), "Crypto"));
-
-                        let _ = handle_ws_read(
-                            state.clone(),
-                            server.clone(),
-                            read,
-                            write_arc.clone(),
-                            pair_name.clone(),
-                        )
-                        .await;
-                    }
-                    Err(e) => {
-                        eprintln!("Failed to connect: {}", e);
-                    }
-                }
-
-                sleep(Duration::from_secs(2)).await;
+        // Wait for either task to complete (whichever finishes first indicates connection is done)
+        tokio::select! {
+            _ = ping_handle => {
+                eprintln!("CRYPTO: Ping loop ended");
             }
-        });
+            _ = read_handle => {
+                eprintln!("CRYPTO: Read loop ended");
+            }
+        }
     }
 }

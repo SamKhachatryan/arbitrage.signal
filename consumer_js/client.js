@@ -60,7 +60,7 @@ const getReliability = (pairExchange) => {
     if (Date.now() - pairExchange.last_update_ts < 70 && pairExchange.latency < 50) return reliabilityEnum.ultrahigh;
     if (Date.now() - pairExchange.last_update_ts < 120 && pairExchange.latency < 100) return reliabilityEnum.high;
     if (Date.now() - pairExchange.last_update_ts < 220 && pairExchange.latency < 200) return reliabilityEnum.medium;
-    if (Date.now() - pairExchange.last_update_ts < 320 && pairExchange.latency < 300) return reliabilityEnum.low;
+    if (Date.now() - pairExchange.last_update_ts < 620 && pairExchange.latency < 600) return reliabilityEnum.low;
 
     return reliabilityEnum.ultralow;
 }

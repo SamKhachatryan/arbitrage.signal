@@ -1,22 +1,19 @@
-use std::{
-    env,
-    sync::{Arc},
-};
+use std::sync::Arc;
 
-use futures::{SinkExt, stream::SplitSink};
+use async_trait::async_trait;
+use futures::SinkExt;
 use futures_util::StreamExt;
 use serde_json::Value;
 use tokio::{net::TcpStream, sync::Mutex};
 use tokio_tungstenite::{
-    MaybeTlsStream, WebSocketStream, connect_async,
+    MaybeTlsStream, WebSocketStream,
     tungstenite::{self, Message},
 };
 
 use crate::{
     define_prometheus_counter,
-    health::prometheus::registry::METRIC_REGISTRY,
     state::{AppControl, AppState},
-    ws_client::common::{ExchangeWSClient},
+    ws_client::{clients::interface::ExchangeWSSession, common},
     ws_server::WSServer,
 };
 
@@ -27,10 +24,10 @@ define_prometheus_counter!(
 );
 
 async fn handle_ws_read(
-    state: Arc<Mutex<AppState>>,
+    state: Arc<std::sync::Mutex<AppState>>,
     server: Arc<Option<WSServer>>,
     mut read: impl StreamExt<Item = Result<Message, tungstenite::Error>> + Unpin,
-    write: Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>,
+    write: Arc<Mutex<impl SinkExt<Message> + Unpin>>,
     //ui: Arc<Mutex<AppState>>,
     pair_name: String,
 ) {
@@ -39,11 +36,7 @@ async fn handle_ws_read(
             Ok(Message::Text(text)) => {
                 if text.contains("\"op\":\"ping\"") {
                     let pong = "{\"op\":\"pong\"}";
-                    let _ = write
-                        .lock()
-                        .await
-                        .send(Message::Text(pong.into()))
-                        .await;
+                    let _ = write.lock().await.send(Message::Text(pong.into())).await;
                     continue;
                 }
 
@@ -65,7 +58,7 @@ async fn handle_ws_read(
                                     if let Some(ts_str) = ts.as_str() {
                                         if let Ok(i64_ts) = ts_str.parse::<i64>() {
                                             BITGET_UPDATES_RECEIVED_COUNTER.inc();
-                                            let safe_state = state.lock().await;
+                                            let safe_state = state.lock().expect("Failed to lock");
                                             safe_state
                                                 .update_price(&pair_name, "bitget", price, i64_ts);
 
@@ -89,8 +82,10 @@ async fn handle_ws_read(
                 eprintln!("BITGET WebSocket closed: {:?}", frame);
                 break;
             }
-            Ok(Message::Ping(_)) | Ok(Message::Pong(_)) => {
-                // ignore pings/pongs for now
+            Ok(Message::Ping(message)) => {
+                if let Err(_e) = write.lock().await.send(Message::Pong(message)).await {
+                    eprintln!("Failed to send pong");
+                }
             }
             Ok(_) => {
                 // other message types ignored
@@ -104,17 +99,17 @@ async fn handle_ws_read(
     }
 }
 
-pub struct BitgetWSClient {}
+pub struct BitgetExchangeWSSession {}
 
-impl ExchangeWSClient for BitgetWSClient {
-    async fn subscribe(
-        state: Arc<Mutex<AppState>>,
+#[async_trait]
+impl ExchangeWSSession for BitgetExchangeWSSession {
+    async fn handle_session(
+        &self,
+        ws_stream: WebSocketStream<MaybeTlsStream<TcpStream>>,
+        state: Arc<std::sync::Mutex<AppState>>,
         server: Arc<Option<WSServer>>,
         pair_name: String,
     ) {
-        let url = env::var("BITGET_WS_URL").expect("BITGET_WS_URL not set in .env");
-        let (ws_stream, _) = connect_async(url).await.expect("Failed to connect");
-
         let (mut write, read) = ws_stream.split();
 
         let subscribe_msg = format!(
@@ -131,23 +126,25 @@ impl ExchangeWSClient for BitgetWSClient {
             pair_name.to_uppercase().replace("-", "")
         );
 
-        write
-            .send(Message::Text(subscribe_msg.to_string().into()))
-            .await
-            .unwrap();
+        if let Err(e) = write.send(Message::Text(subscribe_msg.to_string().into())).await {
+            eprintln!("BITGET: Failed to send subscription message: {}", e);
+            return;
+        }
 
-        let write = Arc::new(Mutex::new(write));
+        let write_arc = Arc::new(Mutex::new(write));
 
-        // tokio::spawn(common::send_ping_loop(write, "Bitget"));
+        // Spawn both tasks and wait for either to complete
+        let ping_handle = tokio::spawn(common::send_ping_loop(write_arc.clone(), "Bitget"));
+        let read_handle = tokio::spawn(handle_ws_read(state, server, read, write_arc.clone(), pair_name));
 
-        let read_write_clone = Arc::clone(&write);
-
-        tokio::spawn(handle_ws_read(
-            state,
-            server,
-            read,
-            read_write_clone,
-            pair_name,
-        ));
+        // Wait for either task to complete (whichever finishes first indicates connection is done)
+        tokio::select! {
+            _ = ping_handle => {
+                eprintln!("BITGET: Ping loop ended");
+            }
+            _ = read_handle => {
+                eprintln!("BITGET: Read loop ended");
+            }
+        }
     }
 }
