@@ -40,6 +40,7 @@ const arbitrageThresholds = {
 };
 
 const reliabilityEnum = {
+    not_reliable_at_all: 0,
     ultralow: 1,
     low: 2,
     medium: 3,

@@ -1,7 +1,4 @@
-use std::{
-    env,
-    sync::{Arc},
-};
+use std::{env, sync::Arc};
 
 use futures::SinkExt;
 use futures_util::StreamExt;
@@ -16,7 +13,7 @@ use crate::{
     define_prometheus_counter,
     health::prometheus::registry::METRIC_REGISTRY,
     state::{AppControl, AppState},
-    ws_client::common::{self, ExchangeWSClient},
+    ws_client::common::ExchangeWSClient,
     ws_server::WSServer,
 };
 
@@ -30,6 +27,7 @@ async fn handle_ws_read(
     state: Arc<Mutex<AppState>>,
     server: Arc<Option<WSServer>>,
     mut read: impl StreamExt<Item = Result<Message, tungstenite::Error>> + Unpin,
+    mut write: impl SinkExt<Message> + Unpin,
     //ui: Arc<Mutex<AppState>>,
     pair_name: String,
 ) {
@@ -43,6 +41,22 @@ async fn handle_ws_read(
                         continue;
                     }
                 };
+
+                if let Some(method) = parsed.get("method").and_then(|name| name.as_str()) {
+                    if method == "public/heartbeat" {
+                        if let Some(id) = parsed.get("id").and_then(|id| id.as_i64()) {
+                            let subscribe_msg = format!(
+                                r#"{{
+                                    "method": "public/respond-heartbeat",
+                                    "id": {}
+                                }}"#,
+                                id
+                            );
+                            let _ = write.send(Message::Text(subscribe_msg.to_string().into()));
+                            continue;
+                        }
+                    }
+                }
 
                 let data = parsed
                     .get("result")
@@ -119,7 +133,7 @@ impl ExchangeWSClient for CryptoWSClient {
             .await
             .unwrap();
 
-        tokio::spawn(common::send_ping_loop(write, "Crypto"));
-        tokio::spawn(handle_ws_read(state, server, read, pair_name));
+        // tokio::spawn(common::send_ping_loop(write, "Crypto"));
+        tokio::spawn(handle_ws_read(state, server, read, write, pair_name));
     }
 }
