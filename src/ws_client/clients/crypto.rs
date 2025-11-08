@@ -13,7 +13,7 @@ use crate::{
     define_prometheus_counter,
     health::prometheus::registry::METRIC_REGISTRY,
     state::{AppControl, AppState},
-    ws_client::common::ExchangeWSClient,
+    ws_client::common::{self, ExchangeWSClient},
     ws_server::WSServer,
 };
 
@@ -27,7 +27,7 @@ async fn handle_ws_read(
     state: Arc<Mutex<AppState>>,
     server: Arc<Option<WSServer>>,
     mut read: impl StreamExt<Item = Result<Message, tungstenite::Error>> + Unpin,
-    mut write: impl SinkExt<Message> + Unpin,
+    mut write: Arc<Mutex<impl SinkExt<Message> + Unpin>>,
     //ui: Arc<Mutex<AppState>>,
     pair_name: String,
 ) {
@@ -52,7 +52,7 @@ async fn handle_ws_read(
                                 }}"#,
                                 id
                             );
-                            let _ = write.send(Message::Text(subscribe_msg.to_string().into()));
+                            let _ = write.lock().await.send(Message::Text(subscribe_msg.to_string().into()));
                             continue;
                         }
                     }
@@ -86,7 +86,8 @@ async fn handle_ws_read(
                 // ignore binary messages
             }
             Ok(Message::Close(frame)) => {
-                eprintln!("WebSocket closed: {:?}", frame);
+                eprintln!("CRYPTO WebSocket closed: {:?}", frame);
+                panic!();
                 break;
             }
             Ok(Message::Ping(_)) | Ok(Message::Pong(_)) => {
@@ -133,7 +134,9 @@ impl ExchangeWSClient for CryptoWSClient {
             .await
             .unwrap();
 
-        // tokio::spawn(common::send_ping_loop(write, "Crypto"));
-        tokio::spawn(handle_ws_read(state, server, read, write, pair_name));
+        let write_arc = Arc::new(Mutex::new(write));
+
+        tokio::spawn(common::send_ping_loop_async(write_arc.clone(), "Crypto"));
+        tokio::spawn(handle_ws_read(state, server, read, write_arc.clone(), pair_name));
     }
 }

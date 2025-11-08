@@ -56,7 +56,7 @@ async fn handle_ws_read(
                 // ignore binary messages
             }
             Ok(Message::Close(frame)) => {
-                eprintln!("WebSocket closed: {:?}", frame);
+                eprintln!("GATE WebSocket closed: {:?}", frame);
                 break;
             }
             Ok(Message::Ping(_)) | Ok(Message::Pong(_)) => {
