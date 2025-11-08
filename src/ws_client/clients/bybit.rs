@@ -6,13 +6,17 @@ use futures_util::StreamExt;
 use serde_json::Value;
 use tokio::{net::TcpStream, sync::Mutex};
 use tokio_tungstenite::{
-    MaybeTlsStream, WebSocketStream, tungstenite::{self, Message}
+    MaybeTlsStream, WebSocketStream,
+    tungstenite::{self, Message},
 };
 
 use crate::{
     define_prometheus_counter,
     state::{AppControl, AppState},
-    ws_client::{clients::interface::ExchangeWSSession, common::{self}},
+    ws_client::{
+        clients::{WS_CLIENTS_PACKAGES_RECEIVED_COUNTER, interface::ExchangeWSSession},
+        common::{self},
+    },
     ws_server::WSServer,
 };
 
@@ -48,6 +52,7 @@ async fn handle_ws_read(
                 {
                     if let Some(ts) = parsed.get("ts") {
                         if let Some(i64_ts) = ts.as_i64() {
+                            WS_CLIENTS_PACKAGES_RECEIVED_COUNTER.inc();
                             BYBIT_UPDATES_RECEIVED_COUNTER.inc();
                             let safe_state = state.lock().expect("Failed to lock");
                             safe_state.update_price(&pair_name, "bybit", price, i64_ts);
@@ -104,7 +109,10 @@ impl ExchangeWSSession for BybitExchangeWSSession {
             pair_name.to_uppercase().replace("-", "")
         );
 
-        if let Err(e) = write.send(Message::Text(subscribe_msg.to_string().into())).await {
+        if let Err(e) = write
+            .send(Message::Text(subscribe_msg.to_string().into()))
+            .await
+        {
             eprintln!("BYBIT: Failed to send subscription message: {}", e);
             return;
         }
@@ -113,7 +121,13 @@ impl ExchangeWSSession for BybitExchangeWSSession {
 
         // Spawn both tasks and wait for either to complete
         let ping_handle = tokio::spawn(common::send_ping_loop(write_arc.clone(), "Bybit"));
-        let read_handle = tokio::spawn(handle_ws_read(state, server, read, write_arc.clone(), pair_name));
+        let read_handle = tokio::spawn(handle_ws_read(
+            state,
+            server,
+            read,
+            write_arc.clone(),
+            pair_name,
+        ));
 
         // Wait for either task to complete (whichever finishes first indicates connection is done)
         tokio::select! {

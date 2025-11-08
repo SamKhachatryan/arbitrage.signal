@@ -6,16 +6,21 @@ use std::{
 };
 
 use dashmap::DashMap;
-use prometheus::{IntGauge, Opts};
 use simple_websockets::{Event, EventHub, Message, Responder};
 
 use crate::{
-    define_prometheus_counter, state::PairExchange,
+    define_prometheus_counter, define_prometheus_gauge, state::PairExchange
 };
 
 pub struct WSServer {
     clients: Arc<Mutex<HashMap<u64, Responder>>>,
 }
+
+define_prometheus_gauge!(
+    WS_SERVER_CLIENTS_GAUGE,
+    "ws_server_clients_gauge",
+    "WS Server: Clients gauge"
+);
 
 define_prometheus_counter!(
     WS_SERVER_PACKAGES_SENT_COUNTER,
@@ -31,20 +36,14 @@ impl WSServer {
     }
 
     pub fn start(&self, event_hub: EventHub) {
-        let counter_opts = Opts::new("ws_server_clients_counter", "WS Server: Clients counter");
-        let gauge: prometheus::core::GenericGauge<prometheus::core::AtomicI64> =
-            IntGauge::with_opts(counter_opts).unwrap();
-
-        let _ = METRIC_REGISTRY.register(Box::new(gauge.clone()));
-
         loop {
             match event_hub.poll_event() {
                 Event::Connect(client_id, responder) => {
-                    gauge.inc();
+                    WS_SERVER_CLIENTS_GAUGE.inc();
                     self.clients.lock().unwrap().insert(client_id, responder);
                 }
                 Event::Disconnect(client_id) => {
-                    gauge.dec();
+                    WS_SERVER_CLIENTS_GAUGE.dec();
                     self.clients.lock().unwrap().remove(&client_id);
                 }
                 Event::Message(client_id, msg) => {

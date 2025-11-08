@@ -13,7 +13,7 @@ use tokio_tungstenite::{
 use crate::{
     define_prometheus_counter,
     state::{AppControl, AppState},
-    ws_client::{clients::interface::ExchangeWSSession, common},
+    ws_client::{clients::{WS_CLIENTS_PACKAGES_RECEIVED_COUNTER, interface::ExchangeWSSession}, common},
     ws_server::WSServer,
 };
 
@@ -57,6 +57,7 @@ async fn handle_ws_read(
                                 if let Some(ts) = val.get("ts") {
                                     if let Some(ts_str) = ts.as_str() {
                                         if let Ok(i64_ts) = ts_str.parse::<i64>() {
+                                            WS_CLIENTS_PACKAGES_RECEIVED_COUNTER.inc();
                                             BITGET_UPDATES_RECEIVED_COUNTER.inc();
                                             let safe_state = state.lock().expect("Failed to lock");
                                             safe_state
@@ -126,7 +127,10 @@ impl ExchangeWSSession for BitgetExchangeWSSession {
             pair_name.to_uppercase().replace("-", "")
         );
 
-        if let Err(e) = write.send(Message::Text(subscribe_msg.to_string().into())).await {
+        if let Err(e) = write
+            .send(Message::Text(subscribe_msg.to_string().into()))
+            .await
+        {
             eprintln!("BITGET: Failed to send subscription message: {}", e);
             return;
         }
@@ -135,7 +139,13 @@ impl ExchangeWSSession for BitgetExchangeWSSession {
 
         // Spawn both tasks and wait for either to complete
         let ping_handle = tokio::spawn(common::send_ping_loop(write_arc.clone(), "Bitget"));
-        let read_handle = tokio::spawn(handle_ws_read(state, server, read, write_arc.clone(), pair_name));
+        let read_handle = tokio::spawn(handle_ws_read(
+            state,
+            server,
+            read,
+            write_arc.clone(),
+            pair_name,
+        ));
 
         // Wait for either task to complete (whichever finishes first indicates connection is done)
         tokio::select! {

@@ -17,27 +17,38 @@ websocket.onopen = (event) => {
 };
 
 const arbitrageThresholds = {
-  "btc-usdt": 0.5,     // High liquidity, tight spreads, fees matter
-  "eth-usdt": 0.6,     // Slightly more volatile than BTC
-  "sol-usdt": 0.7,     // Mid-cap, exchange-specific variance
-  "doge-usdt": 0.8,    // Meme-driven volatility, slippage risk
-  "xrp-usdt": 0.7,     // Regulatory-driven price swings
-  "ton-usdt": 0.9,     // Newer token, wider spreads
-  "ada-usdt": 0.6,     // High volume, moderate spread
-  "link-usdt": 0.7,    // DeFi token, exchange-specific gaps
-  "arb-usdt": 0.8,     // Governance token, volatile across CEXs
-  "op-usdt": 0.8,      // Layer 2 token, frequent spread divergence
-  "ltc-usdt": 0.6,     // Legacy coin, decent liquidity
-  "bch-usdt": 0.7,     // Forked coin, volatile on low volume
-  "uni-usdt": 0.8,     // DeFi token, spread varies by exchange
-  "avax-usdt": 0.8,    // Layer 1 token, moderate liquidity
-  "apt-usdt": 0.9,     // Newer L1, often wide spreads
-  "near-usdt": 0.8,    // L1 with regional exchange variance
-  "matic-usdt": 0.7,   // High volume, but fee-sensitive
-  "pepe-usdt": 1.2,    // Meme coin, extreme volatility
-  "floki-usdt": 1.3,   // Meme coin, low depth, high slippage
-  "sui-usdt": 0.9      // Newer token, frequent arbitrage gaps
+  "btc-usdt": 0.5,
+  "eth-usdt": 0.6,
+  "sol-usdt": 0.7,
+  "doge-usdt": 0.8,
+  "xrp-usdt": 0.7,
+  "ton-usdt": 0.9,
+  "ada-usdt": 0.6,
+  "link-usdt": 0.7,
+  "arb-usdt": 0.8,
+  "op-usdt": 0.8,
+  "ltc-usdt": 0.6,
+  "bch-usdt": 0.7,
+  "uni-usdt": 0.8,
+  "avax-usdt": 0.8,
+  "apt-usdt": 0.9,
+  "near-usdt": 0.8,
+  "matic-usdt": 0.7,
+  "pepe-usdt": 1.2,
+  "floki-usdt": 1.3,
+  "sui-usdt": 0.9,
+  "icp-usdt": 0.9,
+  "xvs-usdt": 1.0,
+  "ach-usdt": 1.1,
+  "fet-usdt": 0.9,
+  "rndr-usdt": 0.8,
+  "enj-usdt": 0.9, 
+  "mina-usdt": 1.0,
+  "gala-usdt": 1.1,
+  "blur-usdt": 1.2,
+  "wojak-usdt": 1.3,
 };
+
 
 const reliabilityEnum = {
     not_reliable_at_all: 0,
@@ -60,7 +71,7 @@ const getReliability = (pairExchange) => {
     if (Date.now() - pairExchange.last_update_ts < 70 && pairExchange.latency < 50) return reliabilityEnum.ultrahigh;
     if (Date.now() - pairExchange.last_update_ts < 120 && pairExchange.latency < 100) return reliabilityEnum.high;
     if (Date.now() - pairExchange.last_update_ts < 220 && pairExchange.latency < 200) return reliabilityEnum.medium;
-    if (Date.now() - pairExchange.last_update_ts < 620 && pairExchange.latency < 600) return reliabilityEnum.low;
+    if (Date.now() - pairExchange.last_update_ts < 320 && pairExchange.latency < 300) return reliabilityEnum.low;
 
     return reliabilityEnum.ultralow;
 }
@@ -96,25 +107,14 @@ websocket.onmessage = (event) => {
                         const firstReliability = getReliability(pairExchange);
                         const secondReliability = getReliability(otherPairExchange);
 
-                        const isHighReliability = firstReliability > reliabilityEnum.ultralow && secondReliability > reliabilityEnum.ultralow;
+                        const isHighReliability = firstReliability > reliabilityEnum.low && secondReliability > reliabilityEnum.low;
 
                         if (isHighReliability) {
-                            console.log(`Arbitrage opportunity (${pairName})`, `${exchangeName} (${pairExchange.price})`, '-', `${otherExchangeName} (${otherPairExchange.price})`, 'Diff percent', '-', Math.round(diffPercent * 100) / 100, '%');
+                            console.log(`Arbitrage opportunity (${pairName})`, `${exchangeName} (${pairExchange.price}) (${reliabilityViewEnum[firstReliability]})`, '-', `${otherExchangeName} (${otherPairExchange.price}) (${reliabilityViewEnum[secondReliability]})`, 'Diff percent', '-', Math.round(diffPercent * 100) / 100, '%');
                         }
                     }
                 }
             });
-            // const otherExchangesMod = otherExchanges.reduce((acc, [, price]) => acc + price * 10000, 0) / otherExchanges.length;
-
-            // diffMap[pairName] ??= {
-            //     diff: 0,
-            //     exchangeName: exchangeName,
-            // };
-
-            // if (Math.abs(price * 10000 - otherExchangesMod) > diffMap[pairName].diff) {
-            // diffMap[pairName].diff = Math.abs(price * 10000 - otherExchangesMod);
-            // diffMap[pairName].exchangeName = exchangeName
-            // }
         });
     });
 

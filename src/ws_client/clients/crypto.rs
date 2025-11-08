@@ -13,7 +13,7 @@ use tokio_tungstenite::{
 use crate::{
     define_prometheus_counter,
     state::{AppControl, AppState},
-    ws_client::{clients::interface::ExchangeWSSession, common},
+    ws_client::{clients::{WS_CLIENTS_PACKAGES_RECEIVED_COUNTER, interface::ExchangeWSSession}, common},
     ws_server::WSServer,
 };
 
@@ -70,6 +70,7 @@ async fn handle_ws_read(
                         if let Some(price_str) = price_str.as_str() {
                             if let Ok(price) = price_str.parse::<f64>() {
                                 if let Some(i64_ts) = val.get("t").and_then(|t| t.as_i64()) {
+                                    WS_CLIENTS_PACKAGES_RECEIVED_COUNTER.inc();
                                     CRYPTO_UPDATES_RECEIVED_COUNTER.inc();
                                     let safe_state = state.lock().expect("Failed to lock");
                                     safe_state.update_price(&pair_name, "crypto", price, i64_ts);

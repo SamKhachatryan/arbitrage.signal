@@ -1,4 +1,7 @@
-use std::{collections::HashMap, sync::{Arc, Mutex}};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 
 use chrono::{TimeZone, Utc, offset::LocalResult};
 use dashmap::DashMap;
@@ -27,6 +30,16 @@ lazy_static! {
         "pepe-usdt",
         "floki-usdt",
         "sui-usdt",
+        "icp-usdt",
+        "xvs-usdt",
+        "ach-usdt",
+        "fet-usdt",
+        "rndr-usdt",
+        "enj-usdt",
+        "mina-usdt",
+        "gala-usdt",
+        "blur-usdt",
+        "wojak-usdt",
     ];
 }
 

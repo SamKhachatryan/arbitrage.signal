@@ -6,7 +6,14 @@ use tokio::net::TcpStream;
 use tokio::time::sleep;
 use tokio_tungstenite::{connect_async_tls_with_config, Connector, MaybeTlsStream, WebSocketStream};
 
+use crate::define_prometheus_gauge;
 use crate::{state::AppState, tls::make_tls_config, ws_server::WSServer};
+
+define_prometheus_gauge!(
+    ACTIVE_WS_CLIENTS_GAUGE,
+    "active_ws_clients_gauge",
+    "Active WS Clients Gauge"
+);
 
 pub struct WSClient<T: ExchangeWSSession + Send + Sync> {
     url: String,
@@ -71,6 +78,9 @@ where
                     Ok((ws_stream, _resp)) => {
                         // eprintln!("Successfully connected to {url}");
                         // retry_count = 0;
+                        
+                        ACTIVE_WS_CLIENTS_GAUGE.inc();
+
                         session
                             .handle_session(
                                 ws_stream,
@@ -79,6 +89,8 @@ where
                                 pair.clone(),
                             )
                             .await;
+
+                        ACTIVE_WS_CLIENTS_GAUGE.dec();
                         // eprintln!("Session ended for {url}, reconnecting...");
                     }
                     Err(e) => {

@@ -10,7 +10,7 @@ use tokio_tungstenite::{
 };
 
 use crate::{
-    define_prometheus_counter, state::{AppControl, AppState}, ws_client::{clients::interface::ExchangeWSSession, common::{self}}, ws_server::WSServer
+    define_prometheus_counter, state::{AppControl, AppState}, ws_client::{clients::{WS_CLIENTS_PACKAGES_RECEIVED_COUNTER, interface::ExchangeWSSession}, common::{self}}, ws_server::WSServer
 };
 
 define_prometheus_counter!(WHITEBIT_UPDATES_RECEIVED_COUNTER, "whitebit_updates_received_counter", "WHITEBIT: Updates Received Counter");
@@ -46,6 +46,7 @@ async fn handle_ws_read(
                         let ts_f64 = params[0].as_f64();
 
                         if let Some(ts_f64) = ts_f64 {
+                            WS_CLIENTS_PACKAGES_RECEIVED_COUNTER.inc();
                             WHITEBIT_UPDATES_RECEIVED_COUNTER.inc();
                             
                             let i64_ts = (ts_f64 * 1000.0) as i64;
