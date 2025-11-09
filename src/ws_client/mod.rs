@@ -59,21 +59,21 @@ pub async fn subscribe_to_all_exchanges(
     //     )
     //     .await;
 
-    let cloned_state = Arc::clone(&state);
-    let cloned_server = Arc::clone(&server);
+    // let cloned_state = Arc::clone(&state);
+    // let cloned_server = Arc::clone(&server);
 
-    let client = WSClient::new(
-        CryptoExchangeWSSession {},
-        std::env::var("CRYPTO_WS_URL").expect("CRYPTO_WS_URL failed"),
-    );
+    // let client = WSClient::new(
+    //     CryptoExchangeWSSession {},
+    //     std::env::var("CRYPTO_WS_URL").expect("CRYPTO_WS_URL failed"),
+    // );
 
-    client
-        .subscribe(
-            cloned_state,
-            cloned_server,
-            PAIR_NAMES[20..30].iter().map(|s| s.to_string()).collect(),
-        )
-        .await;
+    // client
+    //     .subscribe(
+    //         cloned_state,
+    //         cloned_server,
+    //         PAIR_NAMES[20..30].iter().map(|s| s.to_string()).collect(),
+    //     )
+    //     .await;
 
     for each in PAIR_NAMES.iter() {
         let binance_pair_url = format!(
@@ -108,10 +108,10 @@ pub async fn subscribe_to_all_exchanges(
                     BitgetExchangeWSSession {},
                     std::env::var("BITGET_WS_URL").expect("BITGET_WS_URL failed")
                 ),
-                (
-                    CryptoExchangeWSSession {},
-                    std::env::var("CRYPTO_WS_URL").expect("CRYPTO_WS_URL failed")
-                ),
+                // (
+                //     CryptoExchangeWSSession {},
+                //     std::env::var("CRYPTO_WS_URL").expect("CRYPTO_WS_URL failed")
+                // ),
             ]
         )
     }

@@ -77,13 +77,16 @@ const getReliability = (pairExchange) => {
     return reliabilityEnum.ultralow;
 }
 
-const riskCoef = 4;
+const riskCoef = 2;
 
 const toPairExchange = (binary_arr) => ({
     price: binary_arr[0],
     latency: binary_arr[1],
     last_update_ts: binary_arr[2],
 })
+
+const boxDecimal = (num) => Math.round(num * 100000);
+const unboxDecimal = (num) => num / 100000; 
 
 websocket.onmessage = (event) => {
     package_count++;
@@ -101,7 +104,7 @@ websocket.onmessage = (event) => {
                 if (otherExchangeName !== exchangeName) {
                     const highest = Math.max(pairExchange.price, otherPairExchange.price);
                     const lowest = Math.min(pairExchange.price, otherPairExchange.price);
-                    const diffPercent = ((highest - lowest) / lowest) * 100.0;
+                    const diffPercent = ((boxDecimal(highest) - boxDecimal(lowest)) / boxDecimal(lowest)) * 100.0;
                     const acceptableThreshold = (arbitrageThresholds[pairName] || 0.5) / riskCoef;
 
                     if (diffPercent >= acceptableThreshold) {
