@@ -27,6 +27,54 @@ pub async fn subscribe_to_all_exchanges(
     state: &Arc<std::sync::Mutex<AppState>>,
     server: Arc<Option<WSServer>>,
 ) {
+    // let cloned_state = Arc::clone(&state);
+    // let cloned_server = Arc::clone(&server);
+
+    // let client = WSClient::new(
+    //     CryptoExchangeWSSession {},
+    //     std::env::var("CRYPTO_WS_URL").expect("CRYPTO_WS_URL failed"),
+    // );
+
+    // client
+    //     .subscribe(
+    //         cloned_state,
+    //         cloned_server,
+    //         PAIR_NAMES[0..10].iter().map(|s| s.to_string()).collect(),
+    //     )
+    //     .await;
+
+    // let cloned_state = Arc::clone(&state);
+    // let cloned_server = Arc::clone(&server);
+
+    // let client = WSClient::new(
+    //     CryptoExchangeWSSession {},
+    //     std::env::var("CRYPTO_WS_URL").expect("CRYPTO_WS_URL failed"),
+    // );
+
+    // client
+    //     .subscribe(
+    //         cloned_state,
+    //         cloned_server,
+    //         PAIR_NAMES[10..20].iter().map(|s| s.to_string()).collect(),
+    //     )
+    //     .await;
+
+    let cloned_state = Arc::clone(&state);
+    let cloned_server = Arc::clone(&server);
+
+    let client = WSClient::new(
+        CryptoExchangeWSSession {},
+        std::env::var("CRYPTO_WS_URL").expect("CRYPTO_WS_URL failed"),
+    );
+
+    client
+        .subscribe(
+            cloned_state,
+            cloned_server,
+            PAIR_NAMES[20..30].iter().map(|s| s.to_string()).collect(),
+        )
+        .await;
+
     for each in PAIR_NAMES.iter() {
         let binance_pair_url = format!(
             "{}/{}@trade",
@@ -37,12 +85,9 @@ pub async fn subscribe_to_all_exchanges(
         subscribe_list!(
             state,
             server,
-            each.to_string(),
+            vec![each.to_string()],
             [
-                (
-                    BinanceExchangeWSSession {},
-                    binance_pair_url
-                ),
+                (BinanceExchangeWSSession {}, binance_pair_url),
                 (
                     WhitebitExchangeWSSession {},
                     std::env::var("WHITEBIT_WS_URL").expect("WHITEBIT_WS_URL failed")

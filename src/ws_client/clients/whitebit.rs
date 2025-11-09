@@ -94,7 +94,7 @@ impl ExchangeWSSession for WhitebitExchangeWSSession {
         ws_stream: WebSocketStream<MaybeTlsStream<TcpStream>>,
         state: Arc<std::sync::Mutex<AppState>>,
         server: Arc<Option<WSServer>>,
-        pair_name: String,
+        pair_names: Vec<String>,
     ) {
         let (mut write, read) = ws_stream.split();
 
@@ -104,7 +104,7 @@ impl ExchangeWSSession for WhitebitExchangeWSSession {
                 "method": "bookTicker_subscribe",
                 "params": ["{}"]
             }}"#,
-            pair_name.to_uppercase().replace("-", "_")
+            pair_names[0].to_uppercase().replace("-", "_")
         );
 
         if let Err(e) = write.send(Message::Text(subscribe_msg.to_string().into())).await {
@@ -116,7 +116,7 @@ impl ExchangeWSSession for WhitebitExchangeWSSession {
 
         // Spawn both tasks and wait for either to complete
         let ping_handle = tokio::spawn(common::send_ping_loop(write_arc.clone(), "Whitebit"));
-        let read_handle = tokio::spawn(handle_ws_read(state, server, read, write_arc.clone(), pair_name));
+        let read_handle = tokio::spawn(handle_ws_read(state, server, read, write_arc.clone(), pair_names[0].clone()));
 
         // Wait for either task to complete (whichever finishes first indicates connection is done)
         tokio::select! {

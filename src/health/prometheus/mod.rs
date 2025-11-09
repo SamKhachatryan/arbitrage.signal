@@ -31,7 +31,7 @@ pub async fn init_prometheus_server() -> std::io::Result<()> {
         let cors = Cors::permissive();
         App::new().wrap(cors).service(metrics)
     })
-    .bind(("127.0.0.1", 4011))? // Expose metrics on port 9001
+    .bind(("0.0.0.0", 4011))? // Expose metrics on port 9001
     .run()
     .await
 }

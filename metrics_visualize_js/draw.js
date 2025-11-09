@@ -1,5 +1,6 @@
 // CONFIG
-const METRICS_URL = 'http://localhost:4011/health-metrics';
+// const METRICS_URL = 'http://localhost:4011/health-metrics';
+const METRICS_URL = 'http://185.7.81.99:4011/health-metrics';
 const POLL_MS = 1000;
 const EXCHANGES = ['binance', 'bybit', 'okx', 'gate', 'bitget', 'whitebit', 'crypto'];
 

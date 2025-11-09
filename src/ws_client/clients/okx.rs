@@ -105,7 +105,7 @@ impl ExchangeWSSession for OkxExchangeWSSession {
         ws_stream: WebSocketStream<MaybeTlsStream<TcpStream>>,
         state: Arc<std::sync::Mutex<AppState>>,
         server: Arc<Option<WSServer>>,
-        pair_name: String,
+        pair_names: Vec<String>,
     ) {
         let (mut write, read) = ws_stream.split();
 
@@ -115,7 +115,7 @@ impl ExchangeWSSession for OkxExchangeWSSession {
             "args": [{{ "channel": "{}", "instId": "{}" }}]
         }}"#,
             "tickers".to_string(),
-            pair_name.to_uppercase()
+            pair_names[0].to_uppercase()
         );
 
         if let Err(e) = write
@@ -135,7 +135,7 @@ impl ExchangeWSSession for OkxExchangeWSSession {
             server,
             read,
             write_arc.clone(),
-            pair_name,
+            pair_names[0].to_string(),
         ));
 
         // Wait for either task to complete (whichever finishes first indicates connection is done)

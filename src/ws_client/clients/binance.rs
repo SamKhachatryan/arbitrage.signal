@@ -96,7 +96,7 @@ impl ExchangeWSSession for BinanceExchangeWSSession {
         ws_stream: WebSocketStream<MaybeTlsStream<TcpStream>>,
         state: Arc<std::sync::Mutex<AppState>>,
         server: Arc<Option<WSServer>>,
-        pair_name: String,
+        pair_names: Vec<String>,
     ) {
         let (write, read) = ws_stream.split();
 
@@ -104,7 +104,7 @@ impl ExchangeWSSession for BinanceExchangeWSSession {
 
         // Spawn both tasks and wait for either to complete
         let ping_handle = tokio::spawn(common::send_ping_loop(write_arc.clone(), "Binance"));
-        let read_handle = tokio::spawn(handle_ws_read(state, server, read, write_arc.clone(), pair_name));
+        let read_handle = tokio::spawn(handle_ws_read(state, server, read, write_arc.clone(), pair_names[0].to_string()));
 
         // Wait for either task to complete (whichever finishes first indicates connection is done)
         tokio::select! {

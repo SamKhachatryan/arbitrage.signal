@@ -97,7 +97,7 @@ impl ExchangeWSSession for BybitExchangeWSSession {
         ws_stream: WebSocketStream<MaybeTlsStream<TcpStream>>,
         state: Arc<std::sync::Mutex<AppState>>,
         server: Arc<Option<WSServer>>,
-        pair_name: String,
+        pair_names: Vec<String>,
     ) {
         let (mut write, read) = ws_stream.split();
 
@@ -106,7 +106,7 @@ impl ExchangeWSSession for BybitExchangeWSSession {
             "op": "subscribe",
             "args": ["tickers.{}"]
         }}"#,
-            pair_name.to_uppercase().replace("-", "")
+            pair_names[0].to_uppercase().replace("-", "")
         );
 
         if let Err(e) = write
@@ -126,7 +126,7 @@ impl ExchangeWSSession for BybitExchangeWSSession {
             server,
             read,
             write_arc.clone(),
-            pair_name,
+            pair_names[0].to_string(),
         ));
 
         // Wait for either task to complete (whichever finishes first indicates connection is done)

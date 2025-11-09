@@ -28,7 +28,7 @@ pub trait ExchangeWSClient<S: ExchangeWSSession + Send + Sync> {
         &self,
         state: Arc<Mutex<AppState>>,
         server: Arc<Option<WSServer>>,
-        pair: String,
+        pairs: Vec<String>,
     );
 }
 
@@ -39,7 +39,7 @@ pub trait ExchangeWSSession: Send + Sync {
         ws_stream: WebSocketStream<MaybeTlsStream<TcpStream>>,
         state: Arc<Mutex<AppState>>,
         server: Arc<Option<WSServer>>,
-        pair: String,
+        pairs: Vec<String>,
     );
 }
 
@@ -59,12 +59,11 @@ where
         &self,
         state: Arc<Mutex<AppState>>,
         server: Arc<Option<WSServer>>,
-        pair: String,
+        pairs: Vec<String>,
     ) {
         let url = self.url.clone();
         let state = Arc::clone(&state);
         let server = Arc::clone(&server);
-        let pair = pair.clone();
         let session = Arc::clone(&self.session);
 
         tokio::spawn(async move {
@@ -86,7 +85,7 @@ where
                                 ws_stream,
                                 Arc::clone(&state),
                                 Arc::clone(&server),
-                                pair.clone(),
+                                pairs.clone(),
                             )
                             .await;
 

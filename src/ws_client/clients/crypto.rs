@@ -1,4 +1,4 @@
-use std::{sync::{Arc}, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use futures::SinkExt;
@@ -13,7 +13,10 @@ use tokio_tungstenite::{
 use crate::{
     define_prometheus_counter,
     state::{AppControl, AppState},
-    ws_client::{clients::{WS_CLIENTS_PACKAGES_RECEIVED_COUNTER, interface::ExchangeWSSession}, common},
+    ws_client::{
+        clients::{WS_CLIENTS_PACKAGES_RECEIVED_COUNTER, interface::ExchangeWSSession},
+        common,
+    },
     ws_server::WSServer,
 };
 
@@ -28,7 +31,6 @@ async fn handle_ws_read(
     server: Arc<Option<WSServer>>,
     mut read: impl StreamExt<Item = Result<Message, tungstenite::Error>> + Unpin,
     write: Arc<Mutex<impl SinkExt<Message> + Unpin>>,
-    pair_name: String,
 ) {
     while let Some(msg_result) = read.next().await {
         match msg_result {
@@ -60,24 +62,32 @@ async fn handle_ws_read(
                     }
                 }
 
-                let data = parsed
-                    .get("result")
+                let result = parsed.get("result");
+
+                let data = result
                     .and_then(|res| res.get("data"))
                     .and_then(|data| data.get(0));
 
-                if let Some(val) = data {
-                    if let Some(price_str) = val.get("k") {
-                        if let Some(price_str) = price_str.as_str() {
-                            if let Ok(price) = price_str.parse::<f64>() {
-                                if let Some(i64_ts) = val.get("t").and_then(|t| t.as_i64()) {
-                                    WS_CLIENTS_PACKAGES_RECEIVED_COUNTER.inc();
-                                    CRYPTO_UPDATES_RECEIVED_COUNTER.inc();
-                                    let safe_state = state.lock().expect("Failed to lock");
-                                    safe_state.update_price(&pair_name, "crypto", price, i64_ts);
+                if let Some(instrument) = result
+                    .and_then(|data| data.get("instrument_name"))
+                    .and_then(|v| v.as_str())
+                {
+                    let pair_name = instrument.replace("_", "-").to_lowercase();
+    
+                    if let Some(val) = data {
+                        if let Some(price_str) = val.get("k") {
+                            if let Some(price_str) = price_str.as_str() {
+                                if let Ok(price) = price_str.parse::<f64>() {
+                                    if let Some(i64_ts) = val.get("t").and_then(|t| t.as_i64()) {
+                                        WS_CLIENTS_PACKAGES_RECEIVED_COUNTER.inc();
+                                        CRYPTO_UPDATES_RECEIVED_COUNTER.inc();
+                                        let safe_state = state.lock().expect("Failed to lock");
+                                        safe_state.update_price(&pair_name, "crypto", price, i64_ts);
 
-                                    if let Some(ref server_instance) = *server {
-                                        server_instance
-                                            .notify_price_change(&safe_state.exchange_price_map);
+                                        if let Some(ref server_instance) = *server {
+                                            server_instance
+                                                .notify_price_change(&safe_state.exchange_price_map);
+                                        }
                                     }
                                 }
                             }
@@ -121,27 +131,29 @@ impl ExchangeWSSession for CryptoExchangeWSSession {
         ws_stream: WebSocketStream<MaybeTlsStream<TcpStream>>,
         state: Arc<std::sync::Mutex<AppState>>,
         server: Arc<Option<WSServer>>,
-        pair_name: String,
+        pair_names: Vec<String>,
     ) {
         let (write, read) = ws_stream.split();
         let write_arc = Arc::new(Mutex::new(write));
 
         sleep(Duration::from_secs(5)).await;
 
-        let subscribe_msg = format!(
-            r#"{{ "method": "subscribe", "params": {{ "channels": ["ticker.{}"] }}, "id": 1 }}"#,
-            pair_name.to_uppercase().replace("-", "_")
-        );
+        for each in pair_names {
+            let subscribe_msg = format!(
+                r#"{{ "method": "subscribe", "params": {{ "channels": ["ticker.{}"] }}, "id": 1 }}"#,
+                each.to_uppercase().replace("-", "_")
+            );
 
-        if let Err(e) = write_arc
-            .clone()
-            .lock()
-            .await
-            .send(Message::Text(subscribe_msg.into()))
-            .await
-        {
-            eprintln!("CRYPTO: Failed to send subscribe: {}", e);
-            return;
+            if let Err(e) = write_arc
+                .clone()
+                .lock()
+                .await
+                .send(Message::Text(subscribe_msg.into()))
+                .await
+            {
+                eprintln!("CRYPTO: Failed to send subscribe: {}", e);
+                return;
+            }
         }
 
         // Spawn both tasks and wait for either to complete
@@ -151,7 +163,6 @@ impl ExchangeWSSession for CryptoExchangeWSSession {
             server.clone(),
             read,
             write_arc.clone(),
-            pair_name.clone(),
         ));
 
         // Wait for either task to complete (whichever finishes first indicates connection is done)
