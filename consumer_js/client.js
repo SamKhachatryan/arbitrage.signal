@@ -48,6 +48,7 @@ const arbitrageThresholds = {
   "gala-usdt": 1.1,
   "blur-usdt": 1.2,
   "wojak-usdt": 1.3,
+  "bnb-usdt": 0.5,
 };
 
 
@@ -77,7 +78,7 @@ const getReliability = (pairExchange) => {
     return reliabilityEnum.ultralow;
 }
 
-const riskCoef = 2;
+const riskCoef = 3;
 
 const toPairExchange = (binary_arr) => ({
     price: binary_arr[0],

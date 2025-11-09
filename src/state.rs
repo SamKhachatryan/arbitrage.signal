@@ -40,6 +40,7 @@ lazy_static! {
         "gala-usdt",
         "blur-usdt",
         "wojak-usdt",
+        "bnb-usdt",
     ];
 }
 
