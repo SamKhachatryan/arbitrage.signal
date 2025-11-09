@@ -38,7 +38,7 @@ const arbitrageThresholds = {
 //   "pepe-usdt": 1.2,
 //   "floki-usdt": 1.3,
 //   "sui-usdt": 0.9,
-//   "icp-usdt": 0.9,
+  "icp-usdt": 0.9,
 //   "xvs-usdt": 1.0,
   "ach-usdt": 1.1,
 //   "fet-usdt": 0.9,
@@ -78,7 +78,7 @@ const getReliability = (pairExchange) => {
     return reliabilityEnum.ultralow;
 }
 
-const riskCoef = 4;
+const riskCoef = 10;
 
 const toPairExchange = (binary_arr) => ({
     price: binary_arr[0],
@@ -112,7 +112,7 @@ websocket.onmessage = (event) => {
                         const firstReliability = getReliability(pairExchange);
                         const secondReliability = getReliability(otherPairExchange);
 
-                        const isHighReliability = firstReliability > reliabilityEnum.low && secondReliability > reliabilityEnum.low;
+                        const isHighReliability = firstReliability > 0 && secondReliability > 0;
 
                         if (isHighReliability) {
                             console.log(`Arbitrage opportunity (${pairName})`, `${exchangeName} (${pairExchange.price}) (${reliabilityViewEnum[firstReliability]})`, '-', `${otherExchangeName} (${otherPairExchange.price}) (${reliabilityViewEnum[secondReliability]})`, 'Diff percent', '-', Math.round(diffPercent * 100) / 100, '%');
