@@ -4,7 +4,7 @@ pub mod gate;
 pub mod bybit;
 pub mod whitebit;
 pub mod bitget;
-pub mod crypto;
+// pub mod crypto;
 pub mod interface;
 
 use crate::define_prometheus_counter;

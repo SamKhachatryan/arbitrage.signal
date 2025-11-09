@@ -14,7 +14,7 @@ use crate::{
         binance::BinanceExchangeWSSession,
         bitget::BitgetExchangeWSSession,
         bybit::BybitExchangeWSSession,
-        crypto::CryptoExchangeWSSession,
+        // crypto::CryptoExchangeWSSession,
         gate::GateExchangeWSSession,
         interface::{ExchangeWSClient, WSClient},
         okx::OkxExchangeWSSession,
