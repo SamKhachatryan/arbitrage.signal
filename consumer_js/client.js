@@ -18,37 +18,37 @@ websocket.onopen = (event) => {
 };
 
 const arbitrageThresholds = {
-//   "btc-usdt": 0.5,
-//   "eth-usdt": 0.6,
-//   "sol-usdt": 0.7,
-//   "doge-usdt": 0.8,
-//   "xrp-usdt": 0.7,
-//   "ton-usdt": 0.9,
-//   "ada-usdt": 0.6,
-//   "link-usdt": 0.7,
-//   "arb-usdt": 0.8,
-//   "op-usdt": 0.8,
-//   "ltc-usdt": 0.6,
-//   "bch-usdt": 0.7,
-//   "uni-usdt": 0.8,
-//   "avax-usdt": 0.8,
-//   "apt-usdt": 0.9,
-//   "near-usdt": 0.8,
-//   "matic-usdt": 0.7,
-//   "pepe-usdt": 1.2,
-//   "floki-usdt": 1.3,
-//   "sui-usdt": 0.9,
-  "icp-usdt": 0.9,
-//   "xvs-usdt": 1.0,
-  "ach-usdt": 1.1,
-//   "fet-usdt": 0.9,
-//   "rndr-usdt": 0.8,
-//   "enj-usdt": 0.9, 
-//   "mina-usdt": 1.0,
-//   "gala-usdt": 1.1,
-//   "blur-usdt": 1.2,
-//   "wojak-usdt": 1.3,
-//   "bnb-usdt": 0.5,
+    //   "btc-usdt": 0.5,
+    //   "eth-usdt": 0.6,
+    //   "sol-usdt": 0.7,
+    //   "doge-usdt": 0.8,
+    //   "xrp-usdt": 0.7,
+    //   "ton-usdt": 0.9,
+    //   "ada-usdt": 0.6,
+    //   "link-usdt": 0.7,
+    //   "arb-usdt": 0.8,
+    //   "op-usdt": 0.8,
+    //   "ltc-usdt": 0.6,
+    //   "bch-usdt": 0.7,
+    //   "uni-usdt": 0.8,
+    //   "avax-usdt": 0.8,
+    //   "apt-usdt": 0.9,
+    //   "near-usdt": 0.8,
+    //   "matic-usdt": 0.7,
+    //   "pepe-usdt": 1.2,
+    //   "floki-usdt": 1.3,
+    //   "sui-usdt": 0.9,
+    // "icp-usdt": 0.9,
+    //   "xvs-usdt": 1.0,
+    // "ach-usdt": 1.1,
+    //   "fet-usdt": 0.9,
+    //   "rndr-usdt": 0.8,
+      "enj-usdt": 0.9, 
+    //   "mina-usdt": 1.0,
+    //   "gala-usdt": 1.1,
+    //   "blur-usdt": 1.2,
+    //   "wojak-usdt": 1.3,
+    //   "bnb-usdt": 0.5,
 };
 
 
@@ -78,7 +78,7 @@ const getReliability = (pairExchange) => {
     return reliabilityEnum.ultralow;
 }
 
-const riskCoef = 10;
+const riskCoef = 6;
 
 const toPairExchange = (binary_arr) => ({
     price: binary_arr[0],
@@ -87,7 +87,7 @@ const toPairExchange = (binary_arr) => ({
 })
 
 const boxDecimal = (num) => Math.round(num * 100000);
-const unboxDecimal = (num) => num / 100000; 
+const unboxDecimal = (num) => num / 100000;
 
 websocket.onmessage = (event) => {
     package_count++;
@@ -115,7 +115,12 @@ websocket.onmessage = (event) => {
                         const isHighReliability = firstReliability > 0 && secondReliability > 0;
 
                         if (isHighReliability) {
-                            console.log(`Arbitrage opportunity (${pairName})`, `${exchangeName} (${pairExchange.price}) (${reliabilityViewEnum[firstReliability]})`, '-', `${otherExchangeName} (${otherPairExchange.price}) (${reliabilityViewEnum[secondReliability]})`, 'Diff percent', '-', Math.round(diffPercent * 100) / 100, '%');
+                            const cheaperExchange = pairExchange.price < otherPairExchange.price ? exchangeName : otherExchangeName;
+                            const expensiveExchange = pairExchange.price < otherPairExchange.price ? otherExchangeName : exchangeName;
+                            if (cheaperExchange === 'bybit' && expensiveExchange === 'binance') {
+                                console.log(`Arbitrage opportunity (${pairName})`, `Buy on ${cheaperExchange} at ${Math.round(Math.min(pairExchange.price, otherPairExchange.price) * 100000) / 100000}`, `Sell on ${expensiveExchange} at ${Math.round(Math.max(pairExchange.price, otherPairExchange.price) * 100000) / 100000}`, 'Diff percent', '-', Math.round(diffPercent * 100) / 100, '%');
+                            }
+                            // console.log(`Arbitrage opportunity (${pairName})`, `${exchangeName} (${pairExchange.price}) (${reliabilityViewEnum[firstReliability]})`, '-', `${otherExchangeName} (${otherPairExchange.price}) (${reliabilityViewEnum[secondReliability]})`, 'Diff percent', '-', Math.round(diffPercent * 100) / 100, '%');
                         }
                     }
                 }
