@@ -87,23 +87,23 @@ pub async fn subscribe_to_all_exchanges(
             server,
             vec![each.to_string()],
             [
-                (BinanceExchangeWSSession {}, binance_pair_url),
-                (
-                    WhitebitExchangeWSSession {},
-                    std::env::var("WHITEBIT_WS_URL").expect("WHITEBIT_WS_URL failed")
-                ),
-                (
-                    OkxExchangeWSSession {},
-                    std::env::var("OKX_WS_URL").expect("OKX_WS_URL failed")
-                ),
+                // (BinanceExchangeWSSession {}, binance_pair_url),
+                // (
+                //     WhitebitExchangeWSSession {},
+                //     std::env::var("WHITEBIT_WS_URL").expect("WHITEBIT_WS_URL failed")
+                // ),
+                // (
+                //     OkxExchangeWSSession {},
+                //     std::env::var("OKX_WS_URL").expect("OKX_WS_URL failed")
+                // ),
                 (
                     BybitExchangeWSSession {},
                     std::env::var("BYBIT_WS_URL").expect("BYBIT_WS_URL failed")
                 ),
-                (
-                    GateExchangeWSSession {},
-                    std::env::var("GATE_WS_URL").expect("GATE_WS_URL failed")
-                ),
+                // (
+                //     GateExchangeWSSession {},
+                //     std::env::var("GATE_WS_URL").expect("GATE_WS_URL failed")
+                // ),
                 (
                     BitgetExchangeWSSession {},
                     std::env::var("BITGET_WS_URL").expect("BITGET_WS_URL failed")
