@@ -36,7 +36,7 @@ const arbitrageThresholds = {
     //   "near-usdt": 0.8,
     //   "matic-usdt": 0.7,
     //   "pepe-usdt": 1.2,
-      "floki-usdt": 1.3,
+    //   "floki-usdt": 1.3,
     //   "sui-usdt": 0.9,
     "icp-usdt": 0.9,
     //   "xvs-usdt": 1.0,
@@ -44,11 +44,11 @@ const arbitrageThresholds = {
     //   "fet-usdt": 0.9,
     //   "rndr-usdt": 0.8,
       "enj-usdt": 0.9, 
-      "mina-usdt": 1.0,
-      "gala-usdt": 1.1,
-      "blur-usdt": 1.2,
-      "wojak-usdt": 1.3,
-      "bnb-usdt": 0.5,
+    //   "mina-usdt": 1.0,
+    //   "gala-usdt": 1.1,
+    //   "blur-usdt": 1.2,
+    //   "wojak-usdt": 1.3,
+    //   "bnb-usdt": 0.5,
 };
 
 
@@ -117,9 +117,9 @@ websocket.onmessage = (event) => {
                         if (isHighReliability) {
                             const cheaperExchange = pairExchange.price < otherPairExchange.price ? exchangeName : otherExchangeName;
                             const expensiveExchange = pairExchange.price < otherPairExchange.price ? otherExchangeName : exchangeName;
-                            if (cheaperExchange === 'bybit' && expensiveExchange === 'binance') {
+                            // if (cheaperExchange === 'bybit' && expensiveExchange === 'binance') {
                                 console.log(`Arbitrage opportunity (${pairName})`, `Buy on ${cheaperExchange} at ${Math.round(Math.min(pairExchange.price, otherPairExchange.price) * 100000) / 100000}`, `Sell on ${expensiveExchange} at ${Math.round(Math.max(pairExchange.price, otherPairExchange.price) * 100000) / 100000}`, 'Diff percent', '-', Math.round(diffPercent * 100) / 100, '%');
-                            }
+                            // }
                             // console.log(`Arbitrage opportunity (${pairName})`, `${exchangeName} (${pairExchange.price}) (${reliabilityViewEnum[firstReliability]})`, '-', `${otherExchangeName} (${otherPairExchange.price}) (${reliabilityViewEnum[secondReliability]})`, 'Diff percent', '-', Math.round(diffPercent * 100) / 100, '%');
                         }
                     }

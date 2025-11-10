@@ -28,7 +28,7 @@ lazy_static! {
         // "near-usdt",
         // "matic-usdt",
         // "pepe-usdt",
-        "floki-usdt",
+        // "floki-usdt",
         // "sui-usdt",
         "icp-usdt",
         // "xvs-usdt",
@@ -36,11 +36,11 @@ lazy_static! {
         // "fet-usdt",
         // "rndr-usdt",
         "enj-usdt",
-        "mina-usdt",
-        "gala-usdt",
-        "blur-usdt",
-        "wojak-usdt",
-        "bnb-usdt",
+        // "mina-usdt",
+        // "gala-usdt",
+        // "blur-usdt",
+        // "wojak-usdt",
+        // "bnb-usdt",
     ];
 }
 
