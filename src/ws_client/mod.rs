@@ -76,10 +76,13 @@ pub async fn subscribe_to_all_exchanges(
     //     .await;
 
     for each in PAIR_NAMES.iter() {
+        let binance_url = std::env::var("BINANCE_WS_URL").expect("BINANCE_WS_URL failed");
+        let binance_perp_url = std::env::var("BINANCE_WS_PERP_URL").expect("BINANCE_WS_PERP_URL failed");
+
         let binance_pair_url = format!(
             "{}/{}@trade",
-            std::env::var("BINANCE_WS_URL").expect("BINANCE_WS_URL failed"),
-            each.replace("-", "").to_lowercase()
+            if each.ends_with("-perp") { &binance_perp_url } else { &binance_url },
+            each.replace("-perp", "").replace("-", "").to_lowercase()
         );
 
         subscribe_list!(

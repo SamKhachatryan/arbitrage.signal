@@ -1,5 +1,5 @@
 // const wsUri = "ws://localhost:4010";
-const wsUri = "ws://185.7.81.99:4010";
+const wsUri = "ws://localhost:4010";
 
 const websocket = new WebSocket(wsUri);
 websocket.binaryType = "arraybuffer"; // important
@@ -43,7 +43,7 @@ const arbitrageThresholds = {
     "ach-usdt": 1.1,
     //   "fet-usdt": 0.9,
     //   "rndr-usdt": 0.8,
-      "enj-usdt": 0.9, 
+    "enj-usdt": 0.9,
     //   "mina-usdt": 1.0,
     //   "gala-usdt": 1.1,
     //   "blur-usdt": 1.2,
@@ -78,7 +78,7 @@ const getReliability = (pairExchange) => {
     return reliabilityEnum.ultralow;
 }
 
-const riskCoef = 6;
+const riskCoef = 4
 
 const toPairExchange = (binary_arr) => ({
     price: binary_arr[0],
@@ -95,12 +95,16 @@ websocket.onmessage = (event) => {
     const parsed = msgpack.decode(bytes);
 
     Object.entries(parsed).forEach(([pairName, pair]) => {
+        if (pairName.endsWith("-perp")) return;
+
         const allExchangesMap = Object.entries(pair);
+        const allPerpExchangesMap = Object.entries(parsed[`${pairName}-perp`] || {});
+
+        if (!allPerpExchangesMap) return;
 
         allExchangesMap.forEach(([exchangeName, _pairExchange]) => {
-
             const pairExchange = toPairExchange(_pairExchange);
-            allExchangesMap.forEach(([otherExchangeName, _otherPairExchange]) => {
+            allPerpExchangesMap.forEach(([otherExchangeName, _otherPairExchange]) => {
                 const otherPairExchange = toPairExchange(_otherPairExchange);
                 if (otherExchangeName !== exchangeName) {
                     const highest = Math.max(pairExchange.price, otherPairExchange.price);
@@ -118,13 +122,14 @@ websocket.onmessage = (event) => {
                             const cheaperExchange = pairExchange.price < otherPairExchange.price ? exchangeName : otherExchangeName;
                             const expensiveExchange = pairExchange.price < otherPairExchange.price ? otherExchangeName : exchangeName;
                             // if (cheaperExchange === 'bybit' && expensiveExchange === 'binance') {
-                                console.log(`Arbitrage opportunity (${pairName})`, `Buy on ${cheaperExchange} at ${Math.round(Math.min(pairExchange.price, otherPairExchange.price) * 100000) / 100000}`, `Sell on ${expensiveExchange} at ${Math.round(Math.max(pairExchange.price, otherPairExchange.price) * 100000) / 100000}`, 'Diff percent', '-', Math.round(diffPercent * 100) / 100, '%');
+                            console.log(`Arbitrage opportunity (${pairName})`, `Buy on ${cheaperExchange} at ${Math.round(Math.min(pairExchange.price, otherPairExchange.price) * 100000) / 100000}`, `Sell on ${expensiveExchange} at ${Math.round(Math.max(pairExchange.price, otherPairExchange.price) * 100000) / 100000}`, 'Diff percent', '-', Math.round(diffPercent * 100) / 100, '%');
                             // }
                             // console.log(`Arbitrage opportunity (${pairName})`, `${exchangeName} (${pairExchange.price}) (${reliabilityViewEnum[firstReliability]})`, '-', `${otherExchangeName} (${otherPairExchange.price}) (${reliabilityViewEnum[secondReliability]})`, 'Diff percent', '-', Math.round(diffPercent * 100) / 100, '%');
                         }
                     }
                 }
-            });
+            }); return;
+
         });
     });
 

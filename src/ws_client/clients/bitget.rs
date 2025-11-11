@@ -118,13 +118,14 @@ impl ExchangeWSSession for BitgetExchangeWSSession {
                 "op": "subscribe",
                 "args": [
                     {{
-                        "instType": "SPOT",
+                        "instType": "{}",
                         "channel": "ticker",
                         "instId": "{}"
                     }}
                 ]
             }}"#,
-            pair_names[0].to_uppercase().replace("-", "")
+            if pair_names[0].ends_with("-perp") { "USDT-FUTURES" } else { "spot" },
+            pair_names[0].to_uppercase().replace("-PERP", "").replace("-", "")
         );
 
         if let Err(e) = write
