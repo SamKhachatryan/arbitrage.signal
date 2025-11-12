@@ -1,5 +1,5 @@
 // const wsUri = "ws://localhost:4010";
-const wsUri = "ws://localhost:4010";
+const wsUri = "ws://185.7.81.99:4010";
 
 const websocket = new WebSocket(wsUri);
 websocket.binaryType = "arraybuffer"; // important
@@ -44,6 +44,7 @@ const arbitrageThresholds = {
     //   "fet-usdt": 0.9,
     //   "rndr-usdt": 0.8,
     "enj-usdt": 0.9,
+    "cfx-usdt": 0.5,
     //   "mina-usdt": 1.0,
     //   "gala-usdt": 1.1,
     //   "blur-usdt": 1.2,
@@ -116,7 +117,7 @@ websocket.onmessage = (event) => {
                         const firstReliability = getReliability(pairExchange);
                         const secondReliability = getReliability(otherPairExchange);
 
-                        const isHighReliability = firstReliability > 0 && secondReliability > 0;
+                        const isHighReliability = firstReliability > reliabilityEnum.medium && secondReliability > reliabilityEnum.medium;
 
                         if (isHighReliability) {
                             const cheaperExchange = pairExchange.price < otherPairExchange.price ? exchangeName : otherExchangeName;
