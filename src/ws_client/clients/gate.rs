@@ -40,6 +40,8 @@ async fn handle_ws_read(
                     }
                 };
 
+                // println!("{parsed}");
+
                 if let Some(price) = parsed
                     .get("result")
                     .and_then(|data| data.get("last"))
@@ -97,11 +99,12 @@ impl ExchangeWSSession for GateExchangeWSSession {
         let subscribe_msg = format!(
             r#"{{
             "time": {},
-            "channel": "spot.tickers",
+            "channel": "{}",
             "event": "subscribe",
             "payload": ["{}"]
         }}"#,
             chrono::Utc::now().timestamp(),
+            if pair_names[0].ends_with("-perp") { "futures.tickers" } else { "spot.tickers" },
             pair_names[0].to_uppercase().replace("-", "_")
         );
 

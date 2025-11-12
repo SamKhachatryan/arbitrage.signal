@@ -115,7 +115,7 @@ impl ExchangeWSSession for OkxExchangeWSSession {
             "args": [{{ "channel": "{}", "instId": "{}" }}]
         }}"#,
             "tickers".to_string(),
-            pair_names[0].to_uppercase()
+            pair_names[0].replace("-perp", "-swap").to_uppercase()
         );
 
         if let Err(e) = write

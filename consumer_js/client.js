@@ -18,39 +18,39 @@ websocket.onopen = (event) => {
 };
 
 const arbitrageThresholds = {
-    //   "btc-usdt": 0.5,
-    //   "eth-usdt": 0.6,
-    //   "sol-usdt": 0.7,
-    //   "doge-usdt": 0.8,
-    //   "xrp-usdt": 0.7,
-    //   "ton-usdt": 0.9,
-    //   "ada-usdt": 0.6,
-    //   "link-usdt": 0.7,
-    //   "arb-usdt": 0.8,
-    //   "op-usdt": 0.8,
-    //   "ltc-usdt": 0.6,
-    //   "bch-usdt": 0.7,
-    //   "uni-usdt": 0.8,
-    //   "avax-usdt": 0.8,
-    //   "apt-usdt": 0.9,
-    //   "near-usdt": 0.8,
-    //   "matic-usdt": 0.7,
-    //   "pepe-usdt": 1.2,
-    //   "floki-usdt": 1.3,
-    //   "sui-usdt": 0.9,
+    "btc-usdt": 0.5,
+    "eth-usdt": 0.6,
+    "sol-usdt": 0.7,
+    "doge-usdt": 0.8,
+    "xrp-usdt": 0.7,
+    "ton-usdt": 0.9,
+    "ada-usdt": 0.6,
+    "link-usdt": 0.7,
+    "arb-usdt": 0.8,
+    "op-usdt": 0.8,
+    "ltc-usdt": 0.6,
+    "bch-usdt": 0.7,
+    "uni-usdt": 0.8,
+    "avax-usdt": 0.8,
+    "apt-usdt": 0.9,
+    "near-usdt": 0.8,
+    "matic-usdt": 0.7,
+    "pepe-usdt": 1.2,
+    "floki-usdt": 1.3,
+    "sui-usdt": 0.9,
     "icp-usdt": 0.9,
-    //   "xvs-usdt": 1.0,
+    "xvs-usdt": 1.0,
     "ach-usdt": 1.1,
-    //   "fet-usdt": 0.9,
-    //   "rndr-usdt": 0.8,
+    "fet-usdt": 0.9,
+    "rndr-usdt": 0.8,
     "enj-usdt": 0.9,
     "cfx-usdt": 0.5,
     "kas-usdt": 0.6,
-    //   "mina-usdt": 1.0,
-    //   "gala-usdt": 1.1,
-    //   "blur-usdt": 1.2,
-    //   "wojak-usdt": 1.3,
-    //   "bnb-usdt": 0.5,
+    "mina-usdt": 1.0,
+    "gala-usdt": 1.1,
+    "blur-usdt": 1.2,
+    "wojak-usdt": 1.3,
+    "bnb-usdt": 0.5,
 };
 
 
@@ -72,7 +72,6 @@ const reliabilityViewEnum = {
 };
 
 const getReliability = (pairExchange) => {
-    console.log(pairExchange.latency, Date.now() - pairExchange.last_update_ts);
     if (Date.now() - pairExchange.last_update_ts < 70 && pairExchange.latency < 50) return reliabilityEnum.ultrahigh;
     if (Date.now() - pairExchange.last_update_ts < 120 && pairExchange.latency < 100) return reliabilityEnum.high;
     if (Date.now() - pairExchange.last_update_ts < 220 && pairExchange.latency < 200) return reliabilityEnum.medium;
@@ -114,13 +113,12 @@ websocket.onmessage = (event) => {
                     const lowest = Math.min(pairExchange.price, otherPairExchange.price);
                     const diffPercent = ((boxDecimal(highest) - boxDecimal(lowest)) / boxDecimal(lowest)) * 100.0;
                     const acceptableThreshold = (arbitrageThresholds[pairName] || 0.5) / riskCoef;
-
                     if (diffPercent >= acceptableThreshold) {
                         const firstReliability = getReliability(pairExchange);
                         const secondReliability = getReliability(otherPairExchange);
 
                         const isHighReliability = firstReliability > reliabilityEnum.low && secondReliability > reliabilityEnum.low;
- 
+
                         if (isHighReliability) {
                             const cheaperExchange = pairExchange.price < otherPairExchange.price ? exchangeName : otherExchangeName;
                             const expensiveExchange = pairExchange.price < otherPairExchange.price ? otherExchangeName : exchangeName;

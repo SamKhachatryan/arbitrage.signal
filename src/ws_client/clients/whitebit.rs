@@ -1,4 +1,4 @@
-use std::sync::{Arc};
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use futures::SinkExt;
@@ -6,14 +6,25 @@ use futures_util::StreamExt;
 use serde_json::Value;
 use tokio::{net::TcpStream, sync::Mutex};
 use tokio_tungstenite::{
-    MaybeTlsStream, WebSocketStream, tungstenite::{self, Message}
+    MaybeTlsStream, WebSocketStream,
+    tungstenite::{self, Message},
 };
 
 use crate::{
-    define_prometheus_counter, state::{AppControl, AppState}, ws_client::{clients::{WS_CLIENTS_PACKAGES_RECEIVED_COUNTER, interface::ExchangeWSSession}, common::{self}}, ws_server::WSServer
+    define_prometheus_counter,
+    state::{AppControl, AppState},
+    ws_client::{
+        clients::{WS_CLIENTS_PACKAGES_RECEIVED_COUNTER, interface::ExchangeWSSession},
+        common::{self},
+    },
+    ws_server::WSServer,
 };
 
-define_prometheus_counter!(WHITEBIT_UPDATES_RECEIVED_COUNTER, "whitebit_updates_received_counter", "WHITEBIT: Updates Received Counter");
+define_prometheus_counter!(
+    WHITEBIT_UPDATES_RECEIVED_COUNTER,
+    "whitebit_updates_received_counter",
+    "WHITEBIT: Updates Received Counter"
+);
 
 async fn handle_ws_read(
     state: Arc<std::sync::Mutex<AppState>>,
@@ -48,7 +59,7 @@ async fn handle_ws_read(
                         if let Some(ts_f64) = ts_f64 {
                             WS_CLIENTS_PACKAGES_RECEIVED_COUNTER.inc();
                             WHITEBIT_UPDATES_RECEIVED_COUNTER.inc();
-                            
+
                             let i64_ts = (ts_f64 * 1000.0) as i64;
 
                             let safe_state = state.lock().expect("Failed to lock");
@@ -104,10 +115,20 @@ impl ExchangeWSSession for WhitebitExchangeWSSession {
                 "method": "bookTicker_subscribe",
                 "params": ["{}"]
             }}"#,
-            pair_names[0].to_uppercase().replace("-", "_")
+            if pair_names[0].ends_with("-perp") {
+                pair_names[0]
+                    .replace("-usdt", "")
+                    .to_uppercase()
+                    .replace("-", "_")
+            } else {
+                pair_names[0].to_uppercase().replace("-", "_")
+            }
         );
 
-        if let Err(e) = write.send(Message::Text(subscribe_msg.to_string().into())).await {
+        if let Err(e) = write
+            .send(Message::Text(subscribe_msg.to_string().into()))
+            .await
+        {
             eprintln!("WHITEBIT: Failed to send subscription message: {}", e);
             return;
         }
@@ -116,7 +137,13 @@ impl ExchangeWSSession for WhitebitExchangeWSSession {
 
         // Spawn both tasks and wait for either to complete
         let ping_handle = tokio::spawn(common::send_ping_loop(write_arc.clone(), "Whitebit"));
-        let read_handle = tokio::spawn(handle_ws_read(state, server, read, write_arc.clone(), pair_names[0].clone()));
+        let read_handle = tokio::spawn(handle_ws_read(
+            state,
+            server,
+            read,
+            write_arc.clone(),
+            pair_names[0].clone(),
+        ));
 
         // Wait for either task to complete (whichever finishes first indicates connection is done)
         tokio::select! {
