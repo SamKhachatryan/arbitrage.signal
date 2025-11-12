@@ -1,5 +1,5 @@
-// const wsUri = "ws://localhost:4010";
-const wsUri = "ws://185.7.81.99:4010";
+const wsUri = "ws://localhost:4010";
+// const wsUri = "ws://185.7.81.99:4010";
 
 const websocket = new WebSocket(wsUri);
 websocket.binaryType = "arraybuffer"; // important
@@ -72,6 +72,7 @@ const reliabilityViewEnum = {
 };
 
 const getReliability = (pairExchange) => {
+    debugger
     if (Date.now() - pairExchange.last_update_ts < 70 && pairExchange.latency < 50) return reliabilityEnum.ultrahigh;
     if (Date.now() - pairExchange.last_update_ts < 120 && pairExchange.latency < 100) return reliabilityEnum.high;
     if (Date.now() - pairExchange.last_update_ts < 220 && pairExchange.latency < 200) return reliabilityEnum.medium;
@@ -80,7 +81,7 @@ const getReliability = (pairExchange) => {
     return reliabilityEnum.ultralow;
 }
 
-const riskCoef = 4
+const riskCoef = 2;
 
 const toPairExchange = (binary_arr) => ({
     price: binary_arr[0],
