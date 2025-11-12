@@ -45,6 +45,7 @@ const arbitrageThresholds = {
     //   "rndr-usdt": 0.8,
     "enj-usdt": 0.9,
     "cfx-usdt": 0.5,
+    "kas-usdt": 0.6,
     //   "mina-usdt": 1.0,
     //   "gala-usdt": 1.1,
     //   "blur-usdt": 1.2,

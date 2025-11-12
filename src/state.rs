@@ -42,6 +42,7 @@ lazy_static! {
         "wojak-usdt",
         "bnb-usdt",
         "cfx-usdt",
+        "kas-usdt",
         // PERP
         "btc-usdt-perp",
         "eth-usdt-perp",
@@ -74,7 +75,8 @@ lazy_static! {
         "blur-usdt-perp",
         "wojak-usdt-perp",
         "bnb-usdt-perp",
-        "cfx-usdt",
+        "cfx-usdt-perp",
+        "kas-usdt-perp",
     ];
 }
 
