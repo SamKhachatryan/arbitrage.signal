@@ -80,7 +80,7 @@ const getReliability = (pairExchange) => {
     return reliabilityEnum.ultralow;
 }
 
-const riskCoef = 400;
+const riskCoef = 4;
 
 const toPairExchange = (binary_arr) => ({
     price: binary_arr[0],
@@ -117,7 +117,7 @@ websocket.onmessage = (event) => {
                         const firstReliability = getReliability(pairExchange);
                         const secondReliability = getReliability(otherPairExchange);
 
-                        const isHighReliability = firstReliability > reliabilityEnum.low && secondReliability > reliabilityEnum.low;
+                        const isHighReliability = firstReliability > reliabilityEnum.ultralow && secondReliability > reliabilityEnum.ultralow;
 
                         if (isHighReliability) {
                             const cheaperExchange = pairExchange.price < otherPairExchange.price ? exchangeName : otherExchangeName;
