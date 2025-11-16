@@ -48,12 +48,12 @@ fn get_pairs_with_perps() -> Vec<String> {
     .map(|pair| pair.to_string())
     .collect();
 
-    // let mut perp_pairs: Vec<String> = pairs
-    //     .iter()
-    //     .map(|pair| format!("{}-perp", pair))
-    //     .collect();
+    let mut perp_pairs: Vec<String> = pairs
+        .iter()
+        .map(|pair| format!("{}-perp", pair))
+        .collect();
 
-    // pairs.append(&mut perp_pairs);
+    pairs.append(&mut perp_pairs);
     pairs
 }
 
