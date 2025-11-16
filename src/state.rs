@@ -8,76 +8,57 @@ use dashmap::DashMap;
 use lazy_static::lazy_static;
 use serde::Serialize;
 
-lazy_static! {
-    pub static ref PAIR_NAMES: Vec<&'static str> = vec![
-        "btc-usdt",
+fn get_pairs_with_perps() -> Vec<String> {
+    let mut pairs: Vec<String> = vec![
+        // "btc-usdt",
         // "eth-usdt",
-        "sol-usdt",
+        // "sol-usdt",
         // "doge-usdt",
-        "xrp-usdt",
+        // "xrp-usdt",
         // "ton-usdt",
-        "ada-usdt",
+        // "ada-usdt",
         // "link-usdt",
-        "arb-usdt",
+        // "arb-usdt",
         // "op-usdt",
-        "ltc-usdt",
+        // "ltc-usdt",
         // "bch-usdt",
-        "uni-usdt",
+        // "uni-usdt",
         // "avax-usdt",
-        "apt-usdt",
+        // "apt-usdt",
         // "near-usdt",
-        "matic-usdt",
+        // "matic-usdt",
         // "pepe-usdt",
         "floki-usdt",
-        // "sui-usdt",
+        "sui-usdt",
         "icp-usdt",
-        // "xvs-usdt",
+        "xvs-usdt",
         "ach-usdt",
-        // "fet-usdt",
+        "fet-usdt",
         "rndr-usdt",
-        // "enj-usdt",
+        "enj-usdt",
         "mina-usdt",
-        // "gala-usdt",
+        "gala-usdt",
         "blur-usdt",
-        // "wojak-usdt",
+        "wojak-usdt",
         "bnb-usdt",
-        // "cfx-usdt",
+        "cfx-usdt",
         "kas-usdt",
-        // PERP
-        "btc-usdt-perp",
-        // "eth-usdt-perp",
-        "sol-usdt-perp",
-        // "doge-usdt-perp",
-        "xrp-usdt-perp",
-        // "ton-usdt-perp",
-        "ada-usdt-perp",
-        // "link-usdt-perp",
-        "arb-usdt-perp",
-        // "op-usdt-perp",
-        "ltc-usdt-perp",
-        // "bch-usdt-perp",
-        "uni-usdt-perp",
-        // "avax-usdt-perp",
-        "apt-usdt-perp",
-        // "near-usdt-perp",
-        "matic-usdt-perp",
-        // "pepe-usdt-perp",
-        "floki-usdt-perp",
-        // "sui-usdt-perp",
-        "icp-usdt-perp",
-        // "xvs-usdt-perp",
-        "ach-usdt-perp",
-        // "fet-usdt-perp",
-        "rndr-usdt-perp",
-        // "enj-usdt-perp",
-        "mina-usdt-perp",
-        // "gala-usdt-perp",
-        "blur-usdt-perp",
-        // "wojak-usdt-perp",
-        "bnb-usdt-perp",
-        // "cfx-usdt-perp",
-        "kas-usdt-perp",
-    ];
+    ]
+    .iter()
+    .map(|pair| pair.to_string())
+    .collect();
+
+    let mut perp_pairs: Vec<String> = pairs
+        .iter()
+        .map(|pair| format!("{}-perp", pair))
+        .collect();
+
+    pairs.append(&mut perp_pairs);
+    pairs
+}
+
+lazy_static! {
+    pub static ref PAIR_NAMES: Vec<String> = get_pairs_with_perps();
 }
 
 #[derive(Serialize, Clone)]
