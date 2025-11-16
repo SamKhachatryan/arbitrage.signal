@@ -20,4 +20,6 @@ jobs:
           script: |
             cd /root/projects/arbitrage.signal
             git pull
-            /root/.nvm/versions/node/v22.14.0/bin/pm2 restart arbitrage.signal_4010
+            export NVM_DIR="$HOME/.nvm"
+            source $NVM_DIR/nvm.sh
+            pm2 restart arbitrage.signal_4010
