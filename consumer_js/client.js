@@ -114,7 +114,7 @@ websocket.onmessage = (event) => {
                     const lowest = Math.min(pairExchange.price, otherPairExchange.price);
                     const diffPercent = ((boxDecimal(highest) - boxDecimal(lowest)) / boxDecimal(lowest)) * 100.0;
                     const acceptableThreshold = (arbitrageThresholds[pairName] || 0.5) / riskCoef;
-                    if (diffPercent >= acceptableThreshold) {
+                    if (diffPercent >= acceptableThreshold && highest && lowest) {
                         const firstReliability = getReliability(pairExchange);
                         const secondReliability = getReliability(otherPairExchange);
 
