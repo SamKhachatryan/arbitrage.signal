@@ -72,7 +72,6 @@ const reliabilityViewEnum = {
 };
 
 const getReliability = (pairExchange) => {
-    console.log(Date.now() - pairExchange.last_update_ts, 'asdfasdf');
     if (Date.now() - pairExchange.last_update_ts < 70 && pairExchange.latency < 50) return reliabilityEnum.ultrahigh;
     if (Date.now() - pairExchange.last_update_ts < 120 && pairExchange.latency < 100) return reliabilityEnum.high;
     if (Date.now() - pairExchange.last_update_ts < 220 && pairExchange.latency < 200) return reliabilityEnum.medium;
