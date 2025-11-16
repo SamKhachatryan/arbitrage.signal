@@ -20,4 +20,4 @@ jobs:
           script: |
             cd /root/projects/arbitrage.signal
             git pull
-            pm2 restart arbitrage.signal_4010
+            /root/.nvm/versions/node/v22.14.0/bin/pm2 restart arbitrage.signal_4010
