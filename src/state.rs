@@ -14,7 +14,7 @@ fn get_pairs_with_perps() -> Vec<String> {
         "eth-usdt",
         // "sol-usdt",
         "doge-usdt",
-        // "xrp-usdt",
+        "xrp-usdt",
         // "ton-usdt",
         "ada-usdt",
         // "link-usdt",
@@ -40,7 +40,7 @@ fn get_pairs_with_perps() -> Vec<String> {
         // "gala-usdt",
         "blur-usdt",
         // "wojak-usdt",
-        // "bnb-usdt",
+        "bnb-usdt",
         // "cfx-usdt",
         // "kas-usdt",
     ]
