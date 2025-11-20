@@ -30,7 +30,7 @@ fn get_pairs_with_perps() -> Vec<String> {
         // "pepe-usdt",
         // "floki-usdt",
         // "sui-usdt",
-        // "icp-usdt",
+        "icp-usdt",
         // "xvs-usdt",
         "ach-usdt",
         // "fet-usdt",
