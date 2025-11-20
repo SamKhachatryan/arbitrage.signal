@@ -38,7 +38,7 @@ fn get_pairs_with_perps() -> Vec<String> {
         // "enj-usdt",
         // "mina-usdt",
         // "gala-usdt",
-        "blur-usdt",
+        // "blur-usdt",
         // "wojak-usdt",
         // "bnb-usdt",
         // "cfx-usdt",
