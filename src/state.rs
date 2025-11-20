@@ -32,7 +32,7 @@ fn get_pairs_with_perps() -> Vec<String> {
         // "sui-usdt",
         // "icp-usdt",
         // "xvs-usdt",
-        // "ach-usdt", // not supported in whitebit
+        "ach-usdt", // not supported in whitebit
         // "fet-usdt",
         // "rndr-usdt",
         // "enj-usdt",
