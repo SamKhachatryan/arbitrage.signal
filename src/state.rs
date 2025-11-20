@@ -19,7 +19,7 @@ fn get_pairs_with_perps() -> Vec<String> {
         "ada-usdt",
         // "link-usdt",
         "arb-usdt",
-        // "op-usdt",
+        "op-usdt",
         // "ltc-usdt",
         // "bch-usdt",
         // "uni-usdt",
