@@ -13,7 +13,7 @@ use crate::{
     ws_client::clients::{
         binance::BinanceExchangeWSSession,
         bitget::BitgetExchangeWSSession,
-        bybit::BybitExchangeWSSession,
+        // bybit::BybitExchangeWSSession,
         // crypto::CryptoExchangeWSSession,
         gate::GateExchangeWSSession,
         interface::{ExchangeWSClient, WSClient},
