@@ -62,6 +62,8 @@ async fn handle_ws_read(
 
                             let i64_ts = (ts_f64 * 1000.0) as i64;
 
+                            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as i64;
+                            println!("Whitebit - {}", now - i64_ts);
                             let safe_state = state.lock().expect("Failed to lock");
                             safe_state.update_price(&pair_name, "whitebit", mid, i64_ts);
 

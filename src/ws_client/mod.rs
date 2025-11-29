@@ -31,8 +31,8 @@ pub async fn subscribe_to_all_exchanges(
     let binance_perp_url =
         std::env::var("BINANCE_WS_PERP_URL").expect("BINANCE_WS_PERP_URL failed");
 
-    let bybit_url = std::env::var("BYBIT_WS_URL").expect("BYBIT_WS_URL failed");
-    let bybit_perp_url = std::env::var("BYBIT_WS_PERP_URL").expect("BYBIT_WS_PERP_URL failed");
+    // let bybit_url = std::env::var("BYBIT_WS_URL").expect("BYBIT_WS_URL failed");
+    // let bybit_perp_url = std::env::var("BYBIT_WS_PERP_URL").expect("BYBIT_WS_PERP_URL failed");
 
     let gate_url = std::env::var("GATE_WS_URL").expect("GATE_WS_URL failed");
     let gate_perp_url = std::env::var("GATE_WS_PERP_URL").expect("GATE_WS_PERP_URL failed");
@@ -96,12 +96,12 @@ pub async fn subscribe_to_all_exchanges(
             each.replace("-perp", "").replace("-", "").to_lowercase()
         );
 
-        let bybit_pair_url = if each.ends_with("-perp") {
-            &bybit_perp_url
-        } else {
-            &bybit_url
-        }
-        .to_string();
+        // let bybit_pair_url = if each.ends_with("-perp") {
+        //     &bybit_perp_url
+        // } else {
+        //     &bybit_url
+        // }
+        // .to_string();
 
         let gate_pair_url = if each.ends_with("-perp") {
             &gate_perp_url

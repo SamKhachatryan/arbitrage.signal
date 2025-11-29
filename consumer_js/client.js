@@ -1,5 +1,5 @@
 // const wsUri = "ws://localhost:4010";
-const wsUri = "ws://185.7.81.99:4010";
+const wsUri = "ws://146.66.214.41:4010";
 
 const websocket = new WebSocket(wsUri);
 websocket.binaryType = "arraybuffer"; // important
