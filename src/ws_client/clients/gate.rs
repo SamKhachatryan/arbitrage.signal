@@ -51,8 +51,6 @@ async fn handle_ws_read(
                     if let Some(i64_ts) = parsed.get("time_ms").and_then(|v| v.as_i64()) {
                         WS_CLIENTS_PACKAGES_RECEIVED_COUNTER.inc();
                         GATE_UPDATES_RECEIVED_COUNTER.inc();
-                        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as i64;
-                        println!("Gate - {}", now - i64_ts);
                         let safe_state = state.lock().expect("Failed to lock");
                         safe_state.update_price(&pair_name, "gate", price, i64_ts);
                         if let Some(ref server_instance) = *server {

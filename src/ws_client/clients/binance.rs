@@ -48,8 +48,6 @@ async fn handle_ws_read(
                                 if let Some(i64_ts) = ts.as_i64() {
                                     WS_CLIENTS_PACKAGES_RECEIVED_COUNTER.inc();
                                     BINANCE_UPDATES_RECEIVED_COUNTER.inc();
-                                    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as i64;
-                                    println!("Binance - {}", now - i64_ts);
                                     let safe_state = state.lock().expect("Failed to lock");
                                     safe_state.update_price(&pair_name, "binance", price, i64_ts);
 

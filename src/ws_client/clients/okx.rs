@@ -56,8 +56,6 @@ async fn handle_ws_read(
                                     if let Ok(i64_ts) = ts_str.parse::<i64>() {
                                         WS_CLIENTS_PACKAGES_RECEIVED_COUNTER.inc();
                                         OKX_UPDATES_RECEIVED_COUNTER.inc();
-                                        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as i64;
-                                        println!("OKX - {}", now - i64_ts);
                                         let safe_state = state.lock().expect("Failed to lock");
                                         safe_state.update_price(&pair_name, "okx", price, i64_ts);
 
