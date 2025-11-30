@@ -1,6 +1,7 @@
 mod eframe_app;
 mod health;
 mod state;
+mod common;
 mod ws_client;
 mod ws_server;
 mod tls;

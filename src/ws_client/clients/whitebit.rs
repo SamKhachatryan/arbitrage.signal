@@ -11,13 +11,7 @@ use tokio_tungstenite::{
 };
 
 use crate::{
-    define_prometheus_counter,
-    state::{AppControl, AppState},
-    ws_client::{
-        clients::{WS_CLIENTS_PACKAGES_RECEIVED_COUNTER, interface::ExchangeWSSession},
-        common::{self},
-    },
-    ws_server::WSServer,
+    common, define_prometheus_counter, state::{AppControl, AppState}, ws_client::clients::{WS_CLIENTS_PACKAGES_RECEIVED_COUNTER, interface::ExchangeWSSession}, ws_server::WSServer
 };
 
 define_prometheus_counter!(
@@ -136,7 +130,7 @@ impl ExchangeWSSession for WhitebitExchangeWSSession {
         let write_arc = Arc::new(Mutex::new(write));
 
         // Spawn both tasks and wait for either to complete
-        let ping_handle = tokio::spawn(common::send_ping_loop(write_arc.clone(), "Whitebit"));
+        let ping_handle = tokio::spawn(common::ping::send_ping_loop(write_arc.clone(), "Whitebit"));
         let read_handle = tokio::spawn(handle_ws_read(
             state,
             server,

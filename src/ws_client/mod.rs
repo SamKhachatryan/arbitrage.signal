@@ -1,5 +1,4 @@
 mod clients;
-mod common;
 mod subscribe_list;
 
 use std::sync::Arc;

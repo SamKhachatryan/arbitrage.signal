@@ -6,13 +6,15 @@ use futures_util::StreamExt;
 use serde_json::Value;
 use tokio::{net::TcpStream, sync::Mutex};
 use tokio_tungstenite::{
-    MaybeTlsStream, WebSocketStream, tungstenite::{self, Message}
+    MaybeTlsStream, WebSocketStream,
+    tungstenite::{self, Message},
 };
 
 use crate::{
+    common::{self, order_book::OrderBook},
     define_prometheus_counter,
     state::{AppControl, AppState},
-    ws_client::{clients::{WS_CLIENTS_PACKAGES_RECEIVED_COUNTER, interface::ExchangeWSSession}, common::{self}},
+    ws_client::clients::{WS_CLIENTS_PACKAGES_RECEIVED_COUNTER, interface::ExchangeWSSession},
     ws_server::WSServer,
 };
 
@@ -29,6 +31,7 @@ async fn handle_ws_read(
     write: Arc<Mutex<impl SinkExt<Message> + Unpin>>,
     pair_name: String,
 ) {
+    let mut order_book = OrderBook::new();
     while let Some(msg_result) = read.next().await {
         match msg_result {
             Ok(Message::Text(text)) => {
@@ -40,21 +43,38 @@ async fn handle_ws_read(
                     }
                 };
 
-                // println!("{parsed}");
+                // Order book updates: result.asks[0][0] and result.bids[0][0]
+                if let Some(result) = parsed.get("result") {
+                    if let Some(ask) = result.get("a").and_then(|arr| arr.as_array()) {
+                        order_book.update_ask(
+                            ask[0][0].as_str().unwrap().parse::<f64>().unwrap(),
+                            ask[0][1].as_str().unwrap().parse::<f64>().unwrap(),
+                        );
+                    }
+                    if let Some(bid) = result.get("b").and_then(|arr| arr.as_array()) {
+                        order_book.update_bid(
+                            bid[0][0].as_str().unwrap().parse::<f64>().unwrap(),
+                            bid[0][1].as_str().unwrap().parse::<f64>().unwrap(),
+                        );
+                    }
 
-                if let Some(price) = parsed
-                    .get("result")
-                    .and_then(|data| data.get("last"))
-                    .and_then(|v| v.as_str())
-                    .and_then(|v| v.parse::<f64>().ok())
-                {
-                    if let Some(i64_ts) = parsed.get("time_ms").and_then(|v| v.as_i64()) {
-                        WS_CLIENTS_PACKAGES_RECEIVED_COUNTER.inc();
-                        GATE_UPDATES_RECEIVED_COUNTER.inc();
-                        let safe_state = state.lock().expect("Failed to lock");
-                        safe_state.update_price(&pair_name, "gate", price, i64_ts);
-                        if let Some(ref server_instance) = *server {
-                            server_instance.notify_price_change(&safe_state.exchange_price_map);
+                    if order_book.get_depth() < 5 {
+                        continue; // wait until we have enough depth
+                    }
+
+                    // let asks = result.get("asks").and_then(|a| a.as_array());
+                    // let bids = result.get("bids").and_then(|b| b.as_array());
+
+                    if let Some(mid) = order_book.get_mid_price() {
+                        if let Some(i64_ts) = parsed.get("time_ms").and_then(|v| v.as_i64()) {
+                            WS_CLIENTS_PACKAGES_RECEIVED_COUNTER.inc();
+                            GATE_UPDATES_RECEIVED_COUNTER.inc();
+                            let safe_state = state.lock().expect("Failed to lock");
+
+                            safe_state.update_price(&pair_name, "gate", mid, i64_ts);
+                            if let Some(ref server_instance) = *server {
+                                server_instance.notify_price_change(&safe_state.exchange_price_map);
+                            }
                         }
                     }
                 }
@@ -104,11 +124,23 @@ impl ExchangeWSSession for GateExchangeWSSession {
             "payload": ["{}"]
         }}"#,
             chrono::Utc::now().timestamp(),
-            if pair_names[0].ends_with("-perp") { "futures.tickers" } else { "spot.tickers" },
-            pair_names[0].to_uppercase().replace("-", "_")
+            if pair_names[0].ends_with("-perp") {
+                "futures.obu"
+            } else {
+                "spot.obu"
+            },
+            "ob.".to_string()
+                + &pair_names[0]
+                    .to_uppercase()
+                    .replace("-", "_")
+                    .replace("_PERP", "")
+                + ".50"
         );
 
-        if let Err(e) = write.send(Message::Text(subscribe_msg.to_string().into())).await {
+        if let Err(e) = write
+            .send(Message::Text(subscribe_msg.to_string().into()))
+            .await
+        {
             eprintln!("GATE: Failed to send subscription message: {}", e);
             return;
         }
@@ -116,8 +148,14 @@ impl ExchangeWSSession for GateExchangeWSSession {
         let write_arc = Arc::new(Mutex::new(write));
 
         // Spawn both tasks and wait for either to complete
-        let ping_handle = tokio::spawn(common::send_ping_loop(write_arc.clone(), "Gate"));
-        let read_handle = tokio::spawn(handle_ws_read(state, server, read, write_arc.clone(), pair_names[0].clone()));
+        let ping_handle = tokio::spawn(common::ping::send_ping_loop(write_arc.clone(), "Gate"));
+        let read_handle = tokio::spawn(handle_ws_read(
+            state,
+            server,
+            read,
+            write_arc.clone(),
+            pair_names[0].clone(),
+        ));
 
         // Wait for either task to complete (whichever finishes first indicates connection is done)
         tokio::select! {
