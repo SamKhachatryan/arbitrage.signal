@@ -43,6 +43,7 @@ fn get_pairs_with_perps() -> Vec<String> {
         // "bnb-usdt",
         // "cfx-usdt",
         // "kas-usdt",
+        "mon-usdt"
     ]
     .iter()
     .map(|pair| pair.to_string())
