@@ -49,8 +49,7 @@ async fn handle_ws_read(
                 let parsed: MarketOrderDepth = match serde_json::from_str(&text) {
                     Ok(val) => val,
                     Err(e) => {
-                        eprintln!("Error parsing JSON: {} - skipping message", e);
-                        println!("{}", parsed);
+                        eprintln!("[BINANCE] Error parsing JSON: {} - skipping message", e);
                         continue;
                     }
                 };
