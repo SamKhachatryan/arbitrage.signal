@@ -45,6 +45,9 @@ async fn handle_ws_read(
 
                 // Order book updates: result.asks[0][0] and result.bids[0][0]
                 if let Some(result) = parsed.get("result") {
+                    WS_CLIENTS_PACKAGES_RECEIVED_COUNTER.inc();
+                    GATE_UPDATES_RECEIVED_COUNTER.inc();
+
                     if let Some(ask) = result.get("a").and_then(|arr| arr.as_array()) {
                         order_book.update_ask(
                             ask[0][0].as_str().unwrap().parse::<f64>().unwrap(),
@@ -67,8 +70,6 @@ async fn handle_ws_read(
 
                     if let Some(mid) = order_book.get_mid_price() {
                         if let Some(i64_ts) = parsed.get("time_ms").and_then(|v| v.as_i64()) {
-                            WS_CLIENTS_PACKAGES_RECEIVED_COUNTER.inc();
-                            GATE_UPDATES_RECEIVED_COUNTER.inc();
                             let safe_state = state.lock().expect("Failed to lock");
 
                             safe_state.update_price(&pair_name, "gate", mid, i64_ts);

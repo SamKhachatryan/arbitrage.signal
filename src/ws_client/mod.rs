@@ -86,7 +86,7 @@ pub async fn subscribe_to_all_exchanges(
 
     for each in PAIR_NAMES.iter() {
         let binance_pair_url = format!(
-            "{}/{}@trade",
+            "{}/{}@depth@100ms",
             if each.ends_with("-perp") {
                 &binance_perp_url
             } else {

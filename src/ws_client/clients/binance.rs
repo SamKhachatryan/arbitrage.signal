@@ -3,6 +3,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use futures::SinkExt;
 use futures_util::StreamExt;
+use serde::Deserialize;
 use serde_json::Value;
 use tokio::{net::TcpStream, sync::Mutex};
 use tokio_tungstenite::{
@@ -11,8 +12,21 @@ use tokio_tungstenite::{
 };
 
 use crate::{
-    common, define_prometheus_counter, state::{AppControl, AppState}, ws_client::clients::{WS_CLIENTS_PACKAGES_RECEIVED_COUNTER, interface::ExchangeWSSession}, ws_server::WSServer
+    common::{self, order_book::OrderBook},
+    define_prometheus_counter,
+    state::{AppControl, AppState},
+    ws_client::clients::{WS_CLIENTS_PACKAGES_RECEIVED_COUNTER, interface::ExchangeWSSession},
+    ws_server::WSServer,
 };
+
+#[derive(Deserialize)]
+struct MarketOrderDepth {
+    #[serde(rename = "E")]
+    t: i64,
+
+    a: Vec<[String; 2]>,
+    b: Vec<[String; 2]>,
+}
 
 define_prometheus_counter!(
     BINANCE_UPDATES_RECEIVED_COUNTER,
@@ -27,38 +41,49 @@ async fn handle_ws_read(
     write: Arc<Mutex<impl SinkExt<Message> + Unpin>>,
     pair_name: String,
 ) {
+    let mut order_book = OrderBook::new();
+
     while let Some(msg_result) = read.next().await {
         match msg_result {
             Ok(Message::Text(text)) => {
-                let parsed: Value = match serde_json::from_str(&text) {
+                let parsed: MarketOrderDepth = match serde_json::from_str(&text) {
                     Ok(val) => val,
                     Err(e) => {
                         eprintln!("Error parsing JSON: {} - skipping message", e);
+                        println!("{}", parsed);
                         continue;
                     }
                 };
 
-                match parsed.get("p").and_then(|v| v.as_str()) {
-                    Some(price_str) => match price_str.parse::<f64>() {
-                        Ok(price) => {
-                            if let Some(ts) = parsed.get("T") {
-                                if let Some(i64_ts) = ts.as_i64() {
-                                    WS_CLIENTS_PACKAGES_RECEIVED_COUNTER.inc();
-                                    BINANCE_UPDATES_RECEIVED_COUNTER.inc();
-                                    let safe_state = state.lock().expect("Failed to lock");
-                                    safe_state.update_price(&pair_name, "binance", price, i64_ts);
+                WS_CLIENTS_PACKAGES_RECEIVED_COUNTER.inc();
+                BINANCE_UPDATES_RECEIVED_COUNTER.inc();
 
-                                    if let Some(ref server_instance) = *server {
-                                        server_instance
-                                            .notify_price_change(&safe_state.exchange_price_map);
-                                    }
-                                }
-                            }
+                for ask in &parsed.a {
+                    order_book.update_ask(
+                        ask[0].as_str().parse::<f64>().unwrap(),
+                        ask[1].as_str().parse::<f64>().unwrap(),
+                    );
+                }
+
+                for bid in &parsed.b {
+                    order_book.update_bid(
+                        bid[0].as_str().parse::<f64>().unwrap(),
+                        bid[1].as_str().parse::<f64>().unwrap(),
+                    );
+
+                    if order_book.get_depth() < 5 {
+                        continue; // wait until we have enough depth
+                    }
+
+                    let safe_state = state.lock().expect("Failed to lock");
+                    if let Some(mid) = order_book.get_mid_price() {
+                        safe_state.update_price(&pair_name, "binance", mid, parsed.t);
+
+                        if let Some(ref server_instance) = *server {
+                            server_instance.notify_price_change(&safe_state.exchange_price_map);
                         }
-                        Err(_) => eprintln!("Failed to parse price as f64"),
-                    },
-                    None => eprintln!("Failed to parse price as str"),
-                };
+                    }
+                }
             }
             Ok(Message::Binary(_)) => {
                 // ignore binary messages
@@ -101,7 +126,13 @@ impl ExchangeWSSession for BinanceExchangeWSSession {
 
         // Spawn both tasks and wait for either to complete
         let ping_handle = tokio::spawn(common::ping::send_ping_loop(write_arc.clone(), "Binance"));
-        let read_handle = tokio::spawn(handle_ws_read(state, server, read, write_arc.clone(), pair_names[0].to_string()));
+        let read_handle = tokio::spawn(handle_ws_read(
+            state,
+            server,
+            read,
+            write_arc.clone(),
+            pair_names[0].to_string(),
+        ));
 
         // Wait for either task to complete (whichever finishes first indicates connection is done)
         tokio::select! {
