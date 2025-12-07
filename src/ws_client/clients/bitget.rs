@@ -3,7 +3,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use futures::SinkExt;
 use futures_util::StreamExt;
-use serde_json::Value;
+use serde::Deserialize;
 use tokio::{net::TcpStream, sync::Mutex};
 use tokio_tungstenite::{
     MaybeTlsStream, WebSocketStream,
@@ -11,7 +11,11 @@ use tokio_tungstenite::{
 };
 
 use crate::{
-    common, define_prometheus_counter, state::{AppControl, AppState}, ws_client::{clients::{WS_CLIENTS_PACKAGES_RECEIVED_COUNTER, interface::ExchangeWSSession}}, ws_server::WSServer
+    common::{self, order_book::OrderBook},
+    define_prometheus_counter,
+    state::{AppControl, AppState},
+    ws_client::clients::{WS_CLIENTS_PACKAGES_RECEIVED_COUNTER, interface::ExchangeWSSession},
+    ws_server::WSServer,
 };
 
 define_prometheus_counter!(
@@ -19,6 +23,19 @@ define_prometheus_counter!(
     "bitget_updates_received_counter",
     "Bitget: Updates Received Counter"
 );
+
+#[derive(Deserialize)]
+struct MarketOrderDepth {
+    ts: String,
+
+    asks: Vec<[String; 2]>,
+    bids: Vec<[String; 2]>,
+}
+
+#[derive(Deserialize)]
+struct BitgetResponse<T> {
+    data: Option<[T; 1]>,
+}
 
 async fn handle_ws_read(
     state: Arc<std::sync::Mutex<AppState>>,
@@ -28,6 +45,8 @@ async fn handle_ws_read(
     //ui: Arc<Mutex<AppState>>,
     pair_name: String,
 ) {
+    let mut order_book = OrderBook::new();
+
     while let Some(msg_result) = read.next().await {
         match msg_result {
             Ok(Message::Text(text)) => {
@@ -37,7 +56,10 @@ async fn handle_ws_read(
                     continue;
                 }
 
-                let parsed: Value = match serde_json::from_str(&text) {
+                WS_CLIENTS_PACKAGES_RECEIVED_COUNTER.inc();
+                BITGET_UPDATES_RECEIVED_COUNTER.inc();
+
+                let parsed = match serde_json::from_str::<BitgetResponse<MarketOrderDepth>>(&text) {
                     Ok(val) => val,
                     Err(e) => {
                         eprintln!("Error parsing JSON: {} - skipping message", e);
@@ -45,29 +67,40 @@ async fn handle_ws_read(
                     }
                 };
 
-                let data = parsed.get("data").and_then(|data| data.get(0));
+                // let parsed: Value = match serde_json::from_str(&text) {
+                //     Ok(val) => val,
+                //     Err(e) => {
+                //         eprintln!("Error parsing JSON: {} - skipping message", e);
+                //         continue;
+                //     }
+                // };
 
-                if let Some(val) = data {
-                    if let Some(price_str) = val.get("lastPr") {
-                        if let Some(price_str) = price_str.as_str() {
-                            if let Ok(price) = price_str.parse::<f64>() {
-                                if let Some(ts) = val.get("ts") {
-                                    if let Some(ts_str) = ts.as_str() {
-                                        if let Ok(i64_ts) = ts_str.parse::<i64>() {
-                                            WS_CLIENTS_PACKAGES_RECEIVED_COUNTER.inc();
-                                            BITGET_UPDATES_RECEIVED_COUNTER.inc();
-                                            let safe_state = state.lock().expect("Failed to lock");
-                                            safe_state
-                                                .update_price(&pair_name, "bitget", price, i64_ts);
+                if let Some(data) = parsed.data {
+                    for ask in &data[0].asks {
+                        order_book.update_ask(
+                            ask[0].as_str().parse::<f64>().unwrap(),
+                            ask[1].as_str().parse::<f64>().unwrap(),
+                        );
+                    }
 
-                                            if let Some(ref server_instance) = *server {
-                                                server_instance.notify_price_change(
-                                                    &safe_state.exchange_price_map,
-                                                );
-                                            }
-                                        }
-                                    }
-                                }
+                    for bid in &data[0].bids {
+                        order_book.update_bid(
+                            bid[0].as_str().parse::<f64>().unwrap(),
+                            bid[1].as_str().parse::<f64>().unwrap(),
+                        );
+                    }
+
+                    if order_book.get_depth() < 5 {
+                        continue; // wait until we have enough depth
+                    }
+
+                    let safe_state = state.lock().expect("Failed to lock");
+                    if let Some(mid) = order_book.get_mid_price() {
+                        if let Some(ts_i64) = data[0].ts.parse::<i64>().ok() {
+                            safe_state.update_price(&pair_name, "bitget", mid, ts_i64);
+
+                            if let Some(ref server_instance) = *server {
+                                server_instance.notify_price_change(&safe_state.exchange_price_map);
                             }
                         }
                     }
@@ -116,13 +149,20 @@ impl ExchangeWSSession for BitgetExchangeWSSession {
                 "args": [
                     {{
                         "instType": "{}",
-                        "channel": "ticker",
+                        "channel": "books5",
                         "instId": "{}"
                     }}
                 ]
             }}"#,
-            if pair_names[0].ends_with("-perp") { "USDT-FUTURES" } else { "spot" },
-            pair_names[0].to_uppercase().replace("-PERP", "").replace("-", "")
+            if pair_names[0].ends_with("-perp") {
+                "USDT-FUTURES"
+            } else {
+                "spot"
+            },
+            pair_names[0]
+                .to_uppercase()
+                .replace("-PERP", "")
+                .replace("-", "")
         );
 
         if let Err(e) = write

@@ -4,7 +4,6 @@ use async_trait::async_trait;
 use futures::SinkExt;
 use futures_util::StreamExt;
 use serde::Deserialize;
-use serde_json::Value;
 use tokio::{net::TcpStream, sync::Mutex};
 use tokio_tungstenite::{
     MaybeTlsStream, WebSocketStream,
@@ -69,18 +68,18 @@ async fn handle_ws_read(
                         bid[0].as_str().parse::<f64>().unwrap(),
                         bid[1].as_str().parse::<f64>().unwrap(),
                     );
+                }
 
-                    if order_book.get_depth() < 5 {
-                        continue; // wait until we have enough depth
-                    }
+                if order_book.get_depth() < 5 {
+                    continue; // wait until we have enough depth
+                }
 
-                    let safe_state = state.lock().expect("Failed to lock");
-                    if let Some(mid) = order_book.get_mid_price() {
-                        safe_state.update_price(&pair_name, "binance", mid, parsed.t);
+                let safe_state = state.lock().expect("Failed to lock");
+                if let Some(mid) = order_book.get_mid_price() {
+                    safe_state.update_price(&pair_name, "binance", mid, parsed.t);
 
-                        if let Some(ref server_instance) = *server {
-                            server_instance.notify_price_change(&safe_state.exchange_price_map);
-                        }
+                    if let Some(ref server_instance) = *server {
+                        server_instance.notify_price_change(&safe_state.exchange_price_map);
                     }
                 }
             }
