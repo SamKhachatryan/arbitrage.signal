@@ -8,6 +8,8 @@ use dashmap::DashMap;
 use lazy_static::lazy_static;
 use serde::Serialize;
 
+use crate::common::order_book::OrderBook;
+
 fn get_pairs_with_perps() -> Vec<String> {
     let mut pairs: Vec<String> = vec![
         // "btc-usdt",
@@ -18,19 +20,19 @@ fn get_pairs_with_perps() -> Vec<String> {
         // "ton-usdt",
         "ada-usdt",
         // "link-usdt",
-        "arb-usdt",
+        // "arb-usdt",
         // "op-usdt",
         // "ltc-usdt",
         // "bch-usdt",
         "uni-usdt",
-        // "avax-usdt",
-        "apt-usdt",
+        "avax-usdt",
+        // "apt-usdt",
         // "near-usdt",
         // "matic-usdt",
         // "pepe-usdt",
         // "floki-usdt",
         // "sui-usdt",
-        // "icp-usdt",
+        "icp-usdt",
         // "xvs-usdt",
         // "ach-usdt"
         // "fet-usdt",
@@ -64,7 +66,7 @@ lazy_static! {
 
 #[derive(Serialize, Clone)]
 pub struct PairExchange {
-    pub price: f64,
+    pub order_book: OrderBook,
     pub latency: i32,
     pub last_update_ts: i64,
 }
@@ -74,11 +76,14 @@ pub struct AppState {
 }
 
 pub trait AppControl {
-    fn update_price(&self, pair: &str, exchange: &str, price: f64, ts: i64);
+    fn update_price(&self, pair: &str, exchange: &str, order_book: OrderBook, ts: i64);
+    fn update_order_book<F>(&self, pair: &str, exchange: &str, ts: i64, updater: F)
+    where
+        F: FnOnce(&mut OrderBook);
 }
 
 impl AppControl for AppState {
-    fn update_price(&self, pair: &str, exchange: &str, price: f64, ts: i64) {
+    fn update_price(&self, pair: &str, exchange: &str, order_book: OrderBook, ts: i64) {
         if let Some(exchange_map) = self.exchange_price_map.get(pair) {
             let now = Utc::now();
             if let LocalResult::Single(ts_datetime) = Utc.timestamp_millis_opt(ts) {
@@ -86,11 +91,37 @@ impl AppControl for AppState {
                 exchange_map.insert(
                     exchange.to_string(),
                     PairExchange {
-                        price,
+                        order_book,
                         latency: diff_ms.max(0),
                         last_update_ts: ts,
                     },
                 );
+            }
+        } else {
+            eprintln!("Unknown pair: {}", pair);
+        }
+    }
+
+    fn update_order_book<F>(&self, pair: &str, exchange: &str, ts: i64, updater: F)
+    where
+        F: FnOnce(&mut OrderBook),
+    {
+        if let Some(exchange_map) = self.exchange_price_map.get(pair) {
+            let now = Utc::now();
+            if let LocalResult::Single(ts_datetime) = Utc.timestamp_millis_opt(ts) {
+                let diff_ms = (now - ts_datetime).num_milliseconds() as i32;
+                
+                let mut entry = exchange_map
+                    .entry(exchange.to_string())
+                    .or_insert_with(|| PairExchange {
+                        order_book: OrderBook::new(),
+                        latency: 0,
+                        last_update_ts: 0,
+                    });
+                
+                updater(&mut entry.order_book);
+                entry.latency = diff_ms.max(0);
+                entry.last_update_ts = ts;
             }
         } else {
             eprintln!("Unknown pair: {}", pair);

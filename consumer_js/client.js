@@ -1,5 +1,5 @@
-// const wsUri = "ws://localhost:4010";
-const wsUri = "ws://185.7.81.99:4010";
+const wsUri = "ws://localhost:4010";
+// const wsUri = "ws://185.7.81.99:4010";
 // const wsUri = "ws://146.66.214.41:4010";
 
 const websocket = new WebSocket(wsUri);
@@ -96,6 +96,8 @@ websocket.onmessage = (event) => {
     package_count++;
     const bytes = new Uint8Array(event.data);
     const parsed = msgpack.decode(bytes);
+
+    debugger
 
     Object.entries(parsed).forEach(([pairName, pair]) => {
         if (pairName.endsWith("-perp")) return;

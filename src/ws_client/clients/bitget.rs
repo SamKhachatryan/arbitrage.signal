@@ -11,8 +11,7 @@ use tokio_tungstenite::{
 };
 
 use crate::{
-    common::{self, order_book::OrderBook},
-    define_prometheus_counter,
+    common, define_prometheus_counter,
     state::{AppControl, AppState},
     ws_client::clients::{WS_CLIENTS_PACKAGES_RECEIVED_COUNTER, interface::ExchangeWSSession},
     ws_server::WSServer,
@@ -45,8 +44,6 @@ async fn handle_ws_read(
     //ui: Arc<Mutex<AppState>>,
     pair_name: String,
 ) {
-    let mut order_book = OrderBook::new();
-
     while let Some(msg_result) = read.next().await {
         match msg_result {
             Ok(Message::Text(text)) => {
@@ -67,40 +64,39 @@ async fn handle_ws_read(
                     }
                 };
 
-                // let parsed: Value = match serde_json::from_str(&text) {
-                //     Ok(val) => val,
-                //     Err(e) => {
-                //         eprintln!("Error parsing JSON: {} - skipping message", e);
-                //         continue;
-                //     }
-                // };
-
                 if let Some(data) = parsed.data {
-                    for ask in &data[0].asks {
-                        order_book.update_ask(
-                            ask[0].as_str().parse::<f64>().unwrap(),
-                            ask[1].as_str().parse::<f64>().unwrap(),
-                        );
-                    }
+                    if let Some(ts_i64) = data[0].ts.parse::<i64>().ok() {
+                        let safe_state = state.lock().expect("Failed to lock");
 
-                    for bid in &data[0].bids {
-                        order_book.update_bid(
-                            bid[0].as_str().parse::<f64>().unwrap(),
-                            bid[1].as_str().parse::<f64>().unwrap(),
-                        );
-                    }
+                        // Update order book directly without cloning
+                        safe_state.update_order_book(&pair_name, "bitget", ts_i64, |order_book| {
+                            for ask in &data[0].asks {
+                                order_book.update_ask(
+                                    ask[0].as_str().parse::<f64>().unwrap(),
+                                    ask[1].as_str().parse::<f64>().unwrap(),
+                                );
+                            }
 
-                    if order_book.get_depth() < 5 {
-                        continue; // wait until we have enough depth
-                    }
+                            for bid in &data[0].bids {
+                                order_book.update_bid(
+                                    bid[0].as_str().parse::<f64>().unwrap(),
+                                    bid[1].as_str().parse::<f64>().unwrap(),
+                                );
+                            }
+                        });
 
-                    let safe_state = state.lock().expect("Failed to lock");
-                    if let Some(mid) = order_book.get_mid_price() {
-                        if let Some(ts_i64) = data[0].ts.parse::<i64>().ok() {
-                            safe_state.update_price(&pair_name, "bitget", mid, ts_i64);
-
-                            if let Some(ref server_instance) = *server {
-                                server_instance.notify_price_change(&safe_state.exchange_price_map);
+                        // Check depth and notify
+                        if let Some(exchange_map) = safe_state.exchange_price_map.get(&pair_name) {
+                            if let Some(pe) = exchange_map.get("bitget") {
+                                if pe.order_book.get_depth() >= 5 {
+                                    if let Some(ref server_instance) = *server {
+                                        server_instance.notify_price_change(
+                                            &safe_state.exchange_price_map,
+                                            &pair_name,
+                                            "bitget",
+                                        );
+                                    }
+                                }
                             }
                         }
                     }
@@ -157,7 +153,7 @@ impl ExchangeWSSession for BitgetExchangeWSSession {
             if pair_names[0].ends_with("-perp") {
                 "USDT-FUTURES"
             } else {
-                "spot"
+                "SPOT"
             },
             pair_names[0]
                 .to_uppercase()

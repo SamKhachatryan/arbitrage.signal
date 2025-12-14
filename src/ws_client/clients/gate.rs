@@ -11,8 +11,7 @@ use tokio_tungstenite::{
 };
 
 use crate::{
-    common::{self, order_book::OrderBook},
-    define_prometheus_counter,
+    common, define_prometheus_counter,
     state::{AppControl, AppState},
     ws_client::clients::{WS_CLIENTS_PACKAGES_RECEIVED_COUNTER, interface::ExchangeWSSession},
     ws_server::WSServer,
@@ -31,7 +30,6 @@ async fn handle_ws_read(
     write: Arc<Mutex<impl SinkExt<Message> + Unpin>>,
     pair_name: String,
 ) {
-    let mut order_book = OrderBook::new();
     while let Some(msg_result) = read.next().await {
         match msg_result {
             Ok(Message::Text(text)) => {
@@ -48,33 +46,37 @@ async fn handle_ws_read(
                     WS_CLIENTS_PACKAGES_RECEIVED_COUNTER.inc();
                     GATE_UPDATES_RECEIVED_COUNTER.inc();
 
-                    if let Some(ask) = result.get("a").and_then(|arr| arr.as_array()) {
-                        order_book.update_ask(
-                            ask[0][0].as_str().unwrap().parse::<f64>().unwrap(),
-                            ask[0][1].as_str().unwrap().parse::<f64>().unwrap(),
-                        );
-                    }
-                    if let Some(bid) = result.get("b").and_then(|arr| arr.as_array()) {
-                        order_book.update_bid(
-                            bid[0][0].as_str().unwrap().parse::<f64>().unwrap(),
-                            bid[0][1].as_str().unwrap().parse::<f64>().unwrap(),
-                        );
-                    }
+                    if let Some(i64_ts) = parsed.get("time_ms").and_then(|v| v.as_i64()) {
+                        let safe_state = state.lock().expect("Failed to lock");
 
-                    if order_book.get_depth() < 5 {
-                        continue; // wait until we have enough depth
-                    }
+                        // Update order book directly without cloning
+                        safe_state.update_order_book(&pair_name, "gate", i64_ts, |order_book| {
+                            if let Some(ask) = result.get("a").and_then(|arr| arr.as_array()) {
+                                order_book.update_ask(
+                                    ask[0][0].as_str().unwrap().parse::<f64>().unwrap(),
+                                    ask[0][1].as_str().unwrap().parse::<f64>().unwrap(),
+                                );
+                            }
+                            if let Some(bid) = result.get("b").and_then(|arr| arr.as_array()) {
+                                order_book.update_bid(
+                                    bid[0][0].as_str().unwrap().parse::<f64>().unwrap(),
+                                    bid[0][1].as_str().unwrap().parse::<f64>().unwrap(),
+                                );
+                            }
+                        });
 
-                    // let asks = result.get("asks").and_then(|a| a.as_array());
-                    // let bids = result.get("bids").and_then(|b| b.as_array());
-
-                    if let Some(mid) = order_book.get_mid_price() {
-                        if let Some(i64_ts) = parsed.get("time_ms").and_then(|v| v.as_i64()) {
-                            let safe_state = state.lock().expect("Failed to lock");
-
-                            safe_state.update_price(&pair_name, "gate", mid, i64_ts);
-                            if let Some(ref server_instance) = *server {
-                                server_instance.notify_price_change(&safe_state.exchange_price_map);
+                        // Check depth and notify
+                        if let Some(exchange_map) = safe_state.exchange_price_map.get(&pair_name) {
+                            if let Some(pe) = exchange_map.get("gate") {
+                                if pe.order_book.get_depth() >= 5 {
+                                    if let Some(ref server_instance) = *server {
+                                        server_instance.notify_price_change(
+                                            &safe_state.exchange_price_map,
+                                            &pair_name,
+                                            "gate",
+                                        );
+                                    }
+                                }
                             }
                         }
                     }

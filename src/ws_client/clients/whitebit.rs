@@ -3,7 +3,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use futures::SinkExt;
 use futures_util::StreamExt;
-use serde_json::Value;
+use serde::Deserialize;
 use tokio::{net::TcpStream, sync::Mutex};
 use tokio_tungstenite::{
     MaybeTlsStream, WebSocketStream,
@@ -11,7 +11,11 @@ use tokio_tungstenite::{
 };
 
 use crate::{
-    common, define_prometheus_counter, state::{AppControl, AppState}, ws_client::clients::{WS_CLIENTS_PACKAGES_RECEIVED_COUNTER, interface::ExchangeWSSession}, ws_server::WSServer
+    common::{self},
+    define_prometheus_counter,
+    state::{AppControl, AppState},
+    ws_client::clients::{WS_CLIENTS_PACKAGES_RECEIVED_COUNTER, interface::ExchangeWSSession},
+    ws_server::WSServer,
 };
 
 define_prometheus_counter!(
@@ -19,6 +23,19 @@ define_prometheus_counter!(
     "whitebit_updates_received_counter",
     "WHITEBIT: Updates Received Counter"
 );
+
+#[derive(Deserialize)]
+struct MarketOrderDepth {
+    event_time: f64,
+
+    asks: Option<Vec<[String; 2]>>,
+    bids: Option<Vec<[String; 2]>>,
+}
+
+#[derive(Deserialize)]
+struct WhitebitResponse<T> {
+    params: Option<(bool, T, String)>,
+}
 
 async fn handle_ws_read(
     state: Arc<std::sync::Mutex<AppState>>,
@@ -30,37 +47,60 @@ async fn handle_ws_read(
     while let Some(msg_result) = read.next().await {
         match msg_result {
             Ok(Message::Text(text)) => {
-                let parsed: Value = match serde_json::from_str(&text) {
+                let parsed = match serde_json::from_str::<WhitebitResponse<MarketOrderDepth>>(&text)
+                {
                     Ok(val) => val,
                     Err(e) => {
-                        eprintln!("Error parsing JSON: {} - skipping message", e);
+                        eprintln!("Error parsing JSON: {} ({}) - skipping message", text, e);
                         continue;
                     }
                 };
 
-                let working_params = parsed.get("params").and_then(|params| params[0].as_array());
+                WS_CLIENTS_PACKAGES_RECEIVED_COUNTER.inc();
+                WHITEBIT_UPDATES_RECEIVED_COUNTER.inc();
 
-                if let Some(params) = working_params {
-                    let bid_price = params[4].as_str().and_then(|s| s.parse::<f64>().ok());
+                if let Some(data) = parsed.params {
+                    let ts_i64 = data.1.event_time as i64;
+                    let safe_state = state.lock().expect("Failed to lock");
 
-                    let ask_price = params[6].as_str().and_then(|s| s.parse::<f64>().ok());
+                    // Update order book directly without cloning
+                    safe_state.update_order_book(&pair_name, "whitebit", ts_i64, |order_book| {
+                        match &data.1.asks {
+                            Some(asks) => {
+                                for ask in asks {
+                                    order_book.update_ask(
+                                        ask[0].as_str().parse::<f64>().unwrap(),
+                                        ask[1].as_str().parse::<f64>().unwrap(),
+                                    );
+                                }
+                            }
+                            None => {}
+                        }
 
-                    if let (Some(bid_price), Some(ask_price)) = (bid_price, ask_price) {
-                        let mid = (bid_price + ask_price) / 2.0;
+                        match &data.1.bids {
+                            Some(bids) => {
+                                for bid in bids {
+                                    order_book.update_bid(
+                                        bid[0].as_str().parse::<f64>().unwrap(),
+                                        bid[1].as_str().parse::<f64>().unwrap(),
+                                    );
+                                }
+                            }
+                            None => {}
+                        }
+                    });
 
-                        let ts_f64 = params[0].as_f64();
-
-                        if let Some(ts_f64) = ts_f64 {
-                            WS_CLIENTS_PACKAGES_RECEIVED_COUNTER.inc();
-                            WHITEBIT_UPDATES_RECEIVED_COUNTER.inc();
-
-                            let i64_ts = (ts_f64 * 1000.0) as i64;
-
-                            let safe_state = state.lock().expect("Failed to lock");
-                            safe_state.update_price(&pair_name, "whitebit", mid, i64_ts);
-
-                            if let Some(ref server_instance) = *server {
-                                server_instance.notify_price_change(&safe_state.exchange_price_map);
+                    // Check depth and notify
+                    if let Some(exchange_map) = safe_state.exchange_price_map.get(&pair_name) {
+                        if let Some(pe) = exchange_map.get("whitebit") {
+                            if pe.order_book.get_depth() >= 5 {
+                                if let Some(ref server_instance) = *server {
+                                    server_instance.notify_price_change(
+                                        &safe_state.exchange_price_map,
+                                        &pair_name,
+                                        "whitebit",
+                                    );
+                                }
                             }
                         }
                     }
@@ -106,8 +146,8 @@ impl ExchangeWSSession for WhitebitExchangeWSSession {
         let subscribe_msg = format!(
             r#"{{
                 "id": 1,
-                "method": "bookTicker_subscribe",
-                "params": ["{}"]
+                "method": "depth_subscribe",
+                "params": ["{}", 5, "0", true]
             }}"#,
             if pair_names[0].ends_with("-perp") {
                 pair_names[0]
