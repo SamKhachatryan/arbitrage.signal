@@ -11,7 +11,7 @@ use crate::{state::AppState, tls::make_tls_config, ws_server::WSServer};
 
 define_prometheus_gauge!(
     ACTIVE_WS_CLIENTS_GAUGE,
-    "active_ws_clients_gauge",
+    "ACTIVE_WS_CLIENTS_GAUGE",
     "Active WS Clients Gauge"
 );
 
@@ -34,12 +34,22 @@ pub trait ExchangeWSClient<S: ExchangeWSSession + Send + Sync> {
 
 #[async_trait]
 pub trait ExchangeWSSession: Send + Sync {
-    async fn handle_session(
+    async fn handle_ws_session(
         &self,
         ws_stream: WebSocketStream<MaybeTlsStream<TcpStream>>,
         state: Arc<Mutex<AppState>>,
         server: Arc<Option<WSServer>>,
         pairs: Vec<String>,
+    );
+}
+
+#[async_trait]
+pub trait ExchangeResyncOrderbook: Send + Sync {
+    async fn resync_orderbook_loop(
+        &self,
+        state: Arc<Mutex<AppState>>,
+        server: Arc<Option<WSServer>>,
+        pair: String,
     );
 }
 
@@ -81,7 +91,7 @@ where
                         ACTIVE_WS_CLIENTS_GAUGE.inc();
 
                         session
-                            .handle_session(
+                            .handle_ws_session(
                                 ws_stream,
                                 Arc::clone(&state),
                                 Arc::clone(&server),

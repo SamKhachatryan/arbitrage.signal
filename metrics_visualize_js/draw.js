@@ -10,7 +10,7 @@ const TRACKED_METRICS = {
     label: 'WS server: packages sent',
     unit: 'count',
   },
-  ws_clients_packages_received_counter: {
+  WS_CLIENTS_PACKAGES_RECEIVED_COUNTER: {
     label: 'WS client: packages received',
     unit: 'count',
   },

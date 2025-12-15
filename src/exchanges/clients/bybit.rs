@@ -13,7 +13,7 @@
 // use crate::{
 //     define_prometheus_counter,
 //     state::{AppControl, AppState},
-//     ws_client::{
+//     exchanges::{
 //         clients::{WS_CLIENTS_PACKAGES_RECEIVED_COUNTER, interface::ExchangeWSSession},
 //         common::{self},
 //     },
@@ -92,7 +92,7 @@
 
 // #[async_trait]
 // impl ExchangeWSSession for BybitExchangeWSSession {
-//     async fn handle_session(
+//     async fn handle_ws_session(
 //         &self,
 //         ws_stream: WebSocketStream<MaybeTlsStream<TcpStream>>,
 //         state: Arc<std::sync::Mutex<AppState>>,

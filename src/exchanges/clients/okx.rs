@@ -4,7 +4,6 @@ use async_trait::async_trait;
 use futures::SinkExt;
 use futures_util::StreamExt;
 use serde::Deserialize;
-use serde_json::Value;
 use tokio::{net::TcpStream, sync::Mutex};
 use tokio_tungstenite::{
     MaybeTlsStream, WebSocketStream,
@@ -12,10 +11,10 @@ use tokio_tungstenite::{
 };
 
 use crate::{
-    common::{self, order_book::OrderBook},
+    common::{self},
     define_prometheus_counter,
     state::{AppControl, AppState},
-    ws_client::clients::{WS_CLIENTS_PACKAGES_RECEIVED_COUNTER, interface::ExchangeWSSession},
+    exchanges::clients::{WS_CLIENTS_PACKAGES_RECEIVED_COUNTER, interface::ExchangeWSSession},
     ws_server::WSServer,
 };
 
@@ -125,7 +124,7 @@ pub struct OkxExchangeWSSession {}
 
 #[async_trait]
 impl ExchangeWSSession for OkxExchangeWSSession {
-    async fn handle_session(
+    async fn handle_ws_session(
         &self,
         ws_stream: WebSocketStream<MaybeTlsStream<TcpStream>>,
         state: Arc<std::sync::Mutex<AppState>>,

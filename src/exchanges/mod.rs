@@ -9,7 +9,7 @@ use crate::subscribe_list;
 use crate::ws_server::WSServer;
 use crate::{
     state::AppState,
-    ws_client::clients::{
+    exchanges::clients::{
         binance::BinanceExchangeWSSession,
         bitget::BitgetExchangeWSSession,
         // bybit::BybitExchangeWSSession,

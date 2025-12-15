@@ -2,7 +2,7 @@ mod eframe_app;
 mod health;
 mod state;
 mod common;
-mod ws_client;
+mod exchanges;
 mod ws_server;
 mod tls;
 
@@ -22,7 +22,7 @@ async fn main() -> std::io::Result<()> {
 
     let state = init_app_state();
 
-    ws_client::subscribe_to_all_exchanges(&state, client_server).await;
+    exchanges::subscribe_to_all_exchanges(&state, client_server).await;
 
     let http_server = init_prometheus_server();
 

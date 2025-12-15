@@ -14,7 +14,7 @@ use crate::{
     common::{self},
     define_prometheus_counter,
     state::{AppControl, AppState},
-    ws_client::clients::{WS_CLIENTS_PACKAGES_RECEIVED_COUNTER, interface::ExchangeWSSession},
+    exchanges::clients::{WS_CLIENTS_PACKAGES_RECEIVED_COUNTER, interface::ExchangeWSSession},
     ws_server::WSServer,
 };
 
@@ -134,7 +134,7 @@ pub struct WhitebitExchangeWSSession {}
 
 #[async_trait]
 impl ExchangeWSSession for WhitebitExchangeWSSession {
-    async fn handle_session(
+    async fn handle_ws_session(
         &self,
         ws_stream: WebSocketStream<MaybeTlsStream<TcpStream>>,
         state: Arc<std::sync::Mutex<AppState>>,

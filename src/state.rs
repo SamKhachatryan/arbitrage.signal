@@ -12,27 +12,27 @@ use crate::common::order_book::OrderBook;
 
 fn get_pairs_with_perps() -> Vec<String> {
     let mut pairs: Vec<String> = vec![
-        // "btc-usdt",
-        // "eth-usdt",
-        // "sol-usdt",
+        "btc-usdt",
+        "eth-usdt",
+        "sol-usdt",
         "doge-usdt",
-        // "xrp-usdt",
-        // "ton-usdt",
+        "xrp-usdt",
+        "ton-usdt",
         "ada-usdt",
-        // "link-usdt",
-        // "arb-usdt",
+        "link-usdt",
+        "arb-usdt",
         // "op-usdt",
         // "ltc-usdt",
         // "bch-usdt",
-        "uni-usdt",
-        "avax-usdt",
+        // "uni-usdt",
+        // "avax-usdt",
         // "apt-usdt",
         // "near-usdt",
         // "matic-usdt",
         // "pepe-usdt",
         // "floki-usdt",
         // "sui-usdt",
-        "icp-usdt",
+        // "icp-usdt",
         // "xvs-usdt",
         // "ach-usdt"
         // "fet-usdt",
@@ -40,12 +40,12 @@ fn get_pairs_with_perps() -> Vec<String> {
         // "enj-usdt",
         // "mina-usdt",
         // "gala-usdt",
-        "blur-usdt",
+        // "blur-usdt",
         // "wojak-usdt",
         // "bnb-usdt",
         // "cfx-usdt",
         // "kas-usdt",
-        "mon-usdt"
+        // "mon-usdt"
     ]
     .iter()
     .map(|pair| pair.to_string())
@@ -76,32 +76,12 @@ pub struct AppState {
 }
 
 pub trait AppControl {
-    fn update_price(&self, pair: &str, exchange: &str, order_book: OrderBook, ts: i64);
     fn update_order_book<F>(&self, pair: &str, exchange: &str, ts: i64, updater: F)
     where
         F: FnOnce(&mut OrderBook);
 }
 
 impl AppControl for AppState {
-    fn update_price(&self, pair: &str, exchange: &str, order_book: OrderBook, ts: i64) {
-        if let Some(exchange_map) = self.exchange_price_map.get(pair) {
-            let now = Utc::now();
-            if let LocalResult::Single(ts_datetime) = Utc.timestamp_millis_opt(ts) {
-                let diff_ms = (now - ts_datetime).num_milliseconds() as i32;
-                exchange_map.insert(
-                    exchange.to_string(),
-                    PairExchange {
-                        order_book,
-                        latency: diff_ms.max(0),
-                        last_update_ts: ts,
-                    },
-                );
-            }
-        } else {
-            eprintln!("Unknown pair: {}", pair);
-        }
-    }
-
     fn update_order_book<F>(&self, pair: &str, exchange: &str, ts: i64, updater: F)
     where
         F: FnOnce(&mut OrderBook),

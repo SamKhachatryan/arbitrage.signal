@@ -19,7 +19,7 @@
 //     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
 //         CentralPanel::default().show(ctx, |ui| {
 //             ScrollArea::vertical().show(ui, |ui| {
-//                 // using scope to ensure lock release right after clone, so ws_clients want be blocked to write, waiting ui draw
+//                 // using scope to ensure lock release right after clone, so exchangess want be blocked to write, waiting ui draw
 //                 let cloned_data = {
 //                     let locked_state = self.state.lock().expect("Failed to lock");
 //                     let locked_prices = locked_state
