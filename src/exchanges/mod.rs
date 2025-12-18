@@ -119,10 +119,10 @@ pub async fn subscribe_to_all_exchanges(
                     WhitebitExchangeWSSession {},
                     std::env::var("WHITEBIT_WS_URL").expect("WHITEBIT_WS_URL failed")
                 ),
-                // (
-                //     OkxExchangeWSSession {},
-                //     std::env::var("OKX_WS_URL").expect("OKX_WS_URL failed")
-                // ),
+                (
+                    OkxExchangeWSSession {},
+                    std::env::var("OKX_WS_URL").expect("OKX_WS_URL failed")
+                ),
                 // (BybitExchangeWSSession {}, bybit_pair_url),
                 (GateExchangeWSSession {}, gate_pair_url),
                 (

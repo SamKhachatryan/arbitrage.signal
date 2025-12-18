@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use chrono::Utc;
 use futures::SinkExt;
 use futures_util::StreamExt;
 use serde::Deserialize;
@@ -13,8 +14,8 @@ use tokio_tungstenite::{
 use crate::{
     common::{self},
     define_prometheus_counter,
-    state::{AppControl, AppState},
     exchanges::clients::{WS_CLIENTS_PACKAGES_RECEIVED_COUNTER, interface::ExchangeWSSession},
+    state::{AppControl, AppState, PAIR_NAMES},
     ws_server::WSServer,
 };
 
@@ -134,9 +135,8 @@ impl ExchangeWSSession for OkxExchangeWSSession {
         let subscribe_msg = format!(
             r#"{{
             "op": "subscribe",
-            "args": [{{ "channel": "{}", "instId": "{}" }}]
+            "args": [{{ "channel": "books5", "instId": "{}" }}]
         }}"#,
-            "books5".to_string(),
             pair_names[0].replace("-perp", "-swap").to_uppercase()
         );
 
@@ -153,10 +153,16 @@ impl ExchangeWSSession for OkxExchangeWSSession {
         // Spawn both tasks and wait for either to complete
         let ping_handle = tokio::spawn(common::ping::send_ping_loop(write_arc.clone(), "Okx"));
         let read_handle = tokio::spawn(handle_ws_read(
-            state,
-            server,
+            state.clone(),
+            server.clone(),
             read,
             write_arc.clone(),
+            pair_names[0].to_string(),
+        ));
+
+        let _ = tokio::spawn(resync_orderbook_loop(
+            state.clone(),
+            server.clone(),
             pair_names[0].to_string(),
         ));
 
@@ -169,5 +175,112 @@ impl ExchangeWSSession for OkxExchangeWSSession {
                 eprintln!("OKX: Read loop ended");
             }
         }
+    }
+}
+
+#[derive(Deserialize)]
+struct MarketOrderDepthREST {
+    asks: Option<Vec<[String; 4]>>,
+    bids: Option<Vec<[String; 4]>>,
+}
+
+#[derive(Deserialize)]
+struct OkxResponseREST<T> {
+    data: Vec<T>,
+}
+
+async fn resync_orderbook_loop(
+    state: Arc<std::sync::Mutex<AppState>>,
+    server: Arc<WSServer>,
+    pair_name: String,
+) {
+    let client = reqwest::Client::builder().cookie_store(true).build();
+
+    let client = match client {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("[OKX] Error creating reqwest client: {}", e);
+            return;
+        }
+    };
+
+    let pair_index = PAIR_NAMES.iter().position(|p| p == &pair_name);
+    let per_pair_ms = 5000 / PAIR_NAMES.len() as u64;
+
+    // TODO: Actual good queue/semaphore throttling needed here
+    let throttle_duration: std::time::Duration =
+        std::time::Duration::from_millis(per_pair_ms * (pair_index.unwrap_or(0) + 1) as u64);
+
+    tokio::time::sleep(throttle_duration).await;
+
+    loop {
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        let url =
+            std::env::var("OKX_REST_URL").expect("OKX_REST_URL must be set in .env for spot pairs");
+
+        let req = client
+            .get(format!(
+                "{}/market/books?sz=5&instId={}",
+                url,
+                pair_name.replace("-perp", "-swap").to_uppercase(),
+            ))
+            .send();
+
+        let resp = match req.await {
+            Err(e) => {
+                eprintln!("[OKX] Error fetching order book for {}: {}", pair_name, e);
+                continue;
+            }
+            Ok(r) => r,
+        };
+
+        let text = match resp.text().await {
+            Err(e) => {
+                eprintln!("[OKX] Error reading response text for {}: {}", pair_name, e);
+                continue;
+            }
+            Ok(t) => t,
+        };
+
+        let parsed = match serde_json::from_str::<OkxResponseREST<MarketOrderDepthREST>>(&text) {
+            Err(e) => {
+                println!("{}", &text);
+                eprintln!("[OKX] Error parsing JSON for {}: {}", pair_name, e);
+                continue;
+            }
+            Ok(v) => v,
+        };
+
+        let state = state.lock().unwrap();
+
+        if let Some(asks) = &parsed.data[0].asks {
+            let utc = Utc::now();
+            state.update_order_book(&pair_name, "okx", utc.timestamp_millis(), |order_book| {
+                order_book.clean_asks();
+
+                for ask in asks {
+                    order_book.update_ask(
+                        ask[0].parse::<f64>().unwrap_or(0.0),
+                        ask[1].parse::<f64>().unwrap_or(0.0),
+                    );
+                }
+            });
+        }
+
+        if let Some(bids) = &parsed.data[0].bids {
+            let utc = Utc::now();
+            state.update_order_book(&pair_name, "okx", utc.timestamp_millis(), |order_book| {
+                order_book.clean_bids();
+
+                for bid in bids {
+                    order_book.update_bid(
+                        bid[0].parse::<f64>().unwrap_or(0.0),
+                        bid[1].parse::<f64>().unwrap_or(0.0),
+                    );
+                }
+            });
+        }
+
+        server.notify_price_change(&state.exchange_price_map, &pair_name, "okx");
     }
 }
