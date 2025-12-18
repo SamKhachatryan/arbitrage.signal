@@ -12,12 +12,12 @@ use crate::common::order_book::OrderBook;
 
 fn get_pairs_with_perps() -> Vec<String> {
     let mut pairs: Vec<String> = vec![
-        "btc-usdt",
-        "eth-usdt",
-        "sol-usdt",
-        "doge-usdt",
-        "xrp-usdt",
-        "ton-usdt",
+        // "btc-usdt",
+        // "eth-usdt",
+        // "sol-usdt",
+        // "doge-usdt",
+        // "xrp-usdt",
+        // "ton-usdt",
         "ada-usdt",
         "link-usdt",
         "arb-usdt",
@@ -26,7 +26,7 @@ fn get_pairs_with_perps() -> Vec<String> {
         // "bch-usdt",
         // "uni-usdt",
         // "avax-usdt",
-        // "apt-usdt",
+        "apt-usdt",
         // "near-usdt",
         // "matic-usdt",
         // "pepe-usdt",
@@ -40,12 +40,12 @@ fn get_pairs_with_perps() -> Vec<String> {
         // "enj-usdt",
         // "mina-usdt",
         // "gala-usdt",
-        // "blur-usdt",
+        "blur-usdt",
         // "wojak-usdt",
         // "bnb-usdt",
         // "cfx-usdt",
         // "kas-usdt",
-        // "mon-usdt"
+        "mon-usdt"
     ]
     .iter()
     .map(|pair| pair.to_string())

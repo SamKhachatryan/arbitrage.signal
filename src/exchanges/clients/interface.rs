@@ -27,7 +27,7 @@ pub trait ExchangeWSClient<S: ExchangeWSSession + Send + Sync> {
     async fn subscribe(
         &self,
         state: Arc<Mutex<AppState>>,
-        server: Arc<Option<WSServer>>,
+        server: Arc<WSServer>,
         pairs: Vec<String>,
     );
 }
@@ -38,7 +38,7 @@ pub trait ExchangeWSSession: Send + Sync {
         &self,
         ws_stream: WebSocketStream<MaybeTlsStream<TcpStream>>,
         state: Arc<Mutex<AppState>>,
-        server: Arc<Option<WSServer>>,
+        server: Arc<WSServer>,
         pairs: Vec<String>,
     );
 }
@@ -48,8 +48,8 @@ pub trait ExchangeResyncOrderbook: Send + Sync {
     async fn resync_orderbook_loop(
         &self,
         state: Arc<Mutex<AppState>>,
-        server: Arc<Option<WSServer>>,
-        pair: String,
+        server: Arc<WSServer>,
+        pair_name: String,
     );
 }
 
@@ -68,7 +68,7 @@ where
     async fn subscribe(
         &self,
         state: Arc<Mutex<AppState>>,
-        server: Arc<Option<WSServer>>,
+        server: Arc<WSServer>,
         pairs: Vec<String>,
     ) {
         let url = self.url.clone();

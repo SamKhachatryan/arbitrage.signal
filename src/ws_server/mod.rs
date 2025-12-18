@@ -1,9 +1,6 @@
 pub mod init;
 
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
+use std::{collections::HashMap, sync::Arc};
 
 use dashmap::DashMap;
 use simple_websockets::{Event, EventHub, Message, Responder};
@@ -11,7 +8,9 @@ use simple_websockets::{Event, EventHub, Message, Responder};
 use crate::{define_prometheus_counter, define_prometheus_gauge, state::PairExchange};
 
 pub struct WSServer {
-    clients: Arc<Mutex<HashMap<u64, Responder>>>,
+    clients: Arc<DashMap<u64, Responder>>,
+    topics: Arc<DashMap<String, Vec<u64>>>,
+    client_topics: Arc<DashMap<String, Vec<String>>>,
 }
 
 define_prometheus_gauge!(
@@ -26,10 +25,17 @@ define_prometheus_counter!(
     "WS Server: Total number of packages sent"
 );
 
+#[derive(serde::Deserialize)]
+struct SubscribeTopic {
+    topic: String,
+}
+
 impl WSServer {
     pub fn new() -> Self {
         Self {
-            clients: Arc::new(Mutex::new(HashMap::new())),
+            clients: Arc::new(DashMap::new()),
+            topics: Arc::new(DashMap::new()),
+            client_topics: Arc::new(DashMap::new()),
         }
     }
 
@@ -38,15 +44,45 @@ impl WSServer {
             match event_hub.poll_event() {
                 Event::Connect(client_id, responder) => {
                     WS_SERVER_CLIENTS_GAUGE.inc();
-                    self.clients.lock().unwrap().insert(client_id, responder);
+                    self.clients.insert(client_id, responder);
                 }
                 Event::Disconnect(client_id) => {
                     WS_SERVER_CLIENTS_GAUGE.dec();
-                    self.clients.lock().unwrap().remove(&client_id);
+                    self.clients.remove(&client_id);
+                    if let Some(topics) = self.client_topics.remove(&client_id.to_string()) {
+                        for topic in topics.1 {
+                            if let Some(mut entry) = self.topics.get_mut(&topic) {
+                                entry.retain(|&id| id != client_id);
+                            }
+                        }
+                    }
                 }
                 Event::Message(client_id, msg) => {
-                    if let Some(responder) = self.clients.lock().unwrap().get(&client_id) {
-                        responder.send(msg);
+                    match msg {
+                        Message::Text(text) => {
+                            // Deserialize JSON into your struct
+                            match serde_json::from_str::<SubscribeTopic>(&text) {
+                                Ok(parsed) => {
+                                    let topic = parsed.topic;
+                                    self.topics
+                                        .entry(topic.clone())
+                                        .or_insert_with(Vec::new)
+                                        .push(client_id);
+
+                                    self.client_topics
+                                        .entry(client_id.to_string())
+                                        .or_insert_with(Vec::new)
+                                        .push(topic);
+                                }
+                                Err(e) => {
+                                    println!("Failed to parse message from {}: {}", client_id, e);
+                                }
+                            }
+                        }
+                        Message::Binary(bin) => {
+                            println!("Client {} sent binary data: {:?}", client_id, bin);
+                            // You could also deserialize binary formats here (e.g. bincode)
+                        }
                     }
                 }
             }
@@ -73,9 +109,14 @@ impl WSServer {
 
                     match rmp_serde::to_vec(&map) {
                         Ok(resp_vect) => {
-                            let clients = self.clients.lock().unwrap();
-                            for responder in clients.values() {
-                                responder.send(Message::Binary(resp_vect.clone()));
+                            let clients = self.topics.entry(pair_name.to_string()).or_default();
+                            for client_id in clients.iter() {
+                                match self.clients.get(client_id) {
+                                    Some(r) => {
+                                        r.send(Message::Binary(resp_vect.clone()));
+                                    }
+                                    None => continue,
+                                };
                             }
                         }
                         Err(e) => {

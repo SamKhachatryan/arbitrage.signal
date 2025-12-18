@@ -38,7 +38,7 @@ define_prometheus_counter!(
 
 async fn handle_ws_read(
     state: Arc<std::sync::Mutex<AppState>>,
-    server: Arc<Option<WSServer>>,
+    server: Arc<WSServer>,
     mut read: impl StreamExt<Item = Result<Message, tungstenite::Error>> + Unpin,
     write: Arc<Mutex<impl SinkExt<Message> + Unpin>>,
     pair_name: String,
@@ -80,13 +80,11 @@ async fn handle_ws_read(
                 if let Some(exchange_map) = safe_state.exchange_price_map.get(&pair_name) {
                     if let Some(pe) = exchange_map.get("binance") {
                         if pe.order_book.get_depth() >= 5 {
-                            if let Some(ref server_instance) = *server {
-                                server_instance.notify_price_change(
-                                    &safe_state.exchange_price_map,
-                                    &pair_name,
-                                    "binance",
-                                );
-                            }
+                            server.notify_price_change(
+                                &safe_state.exchange_price_map,
+                                &pair_name,
+                                "binance",
+                            );
                         }
                     }
                 }
@@ -123,7 +121,7 @@ impl ExchangeWSSession for BinanceExchangeWSSession {
         &self,
         ws_stream: WebSocketStream<MaybeTlsStream<TcpStream>>,
         state: Arc<std::sync::Mutex<AppState>>,
-        server: Arc<Option<WSServer>>,
+        server: Arc<WSServer>,
         pair_names: Vec<String>,
     ) {
         let (write, read) = ws_stream.split();
@@ -170,7 +168,7 @@ impl ExchangeResyncOrderbook for BinanceExchangeWSSession {
     async fn resync_orderbook_loop(
         &self,
         state: Arc<std::sync::Mutex<AppState>>,
-        server: Arc<Option<WSServer>>,
+        server: Arc<WSServer>,
         pair_name: String,
     ) {
         loop {
@@ -264,13 +262,11 @@ impl ExchangeResyncOrderbook for BinanceExchangeWSSession {
                 );
             }
 
-            if let Some(ref server_instance) = *server {
-                server_instance.notify_price_change(
-                    &state.exchange_price_map,
-                    &pair_name,
-                    "binance",
-                );
-            }
+            server.notify_price_change(
+                &state.exchange_price_map,
+                &pair_name,
+                "binance",
+            );
         }
     }
 }

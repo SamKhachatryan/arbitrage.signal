@@ -1,8 +1,10 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use chrono::Utc;
 use futures::SinkExt;
 use futures_util::StreamExt;
+use serde::Deserialize;
 use serde_json::Value;
 use tokio::{net::TcpStream, sync::Mutex};
 use tokio_tungstenite::{
@@ -11,10 +13,7 @@ use tokio_tungstenite::{
 };
 
 use crate::{
-    common, define_prometheus_counter,
-    state::{AppControl, AppState},
-    exchanges::clients::{WS_CLIENTS_PACKAGES_RECEIVED_COUNTER, interface::ExchangeWSSession},
-    ws_server::WSServer,
+    common, define_prometheus_counter, exchanges::clients::{WS_CLIENTS_PACKAGES_RECEIVED_COUNTER, interface::ExchangeWSSession}, state::{AppControl, AppState, PAIR_NAMES}, ws_server::WSServer
 };
 
 define_prometheus_counter!(
@@ -25,7 +24,7 @@ define_prometheus_counter!(
 
 async fn handle_ws_read(
     state: Arc<std::sync::Mutex<AppState>>,
-    server: Arc<Option<WSServer>>,
+    server: Arc<WSServer>,
     mut read: impl StreamExt<Item = Result<Message, tungstenite::Error>> + Unpin,
     write: Arc<Mutex<impl SinkExt<Message> + Unpin>>,
     pair_name: String,
@@ -69,13 +68,11 @@ async fn handle_ws_read(
                         if let Some(exchange_map) = safe_state.exchange_price_map.get(&pair_name) {
                             if let Some(pe) = exchange_map.get("gate") {
                                 if pe.order_book.get_depth() >= 5 {
-                                    if let Some(ref server_instance) = *server {
-                                        server_instance.notify_price_change(
+                                    server.notify_price_change(
                                             &safe_state.exchange_price_map,
                                             &pair_name,
                                             "gate",
                                         );
-                                    }
                                 }
                             }
                         }
@@ -114,7 +111,7 @@ impl ExchangeWSSession for GateExchangeWSSession {
         &self,
         ws_stream: WebSocketStream<MaybeTlsStream<TcpStream>>,
         state: Arc<std::sync::Mutex<AppState>>,
-        server: Arc<Option<WSServer>>,
+        server: Arc<WSServer>,
         pair_names: Vec<String>,
     ) {
         let (mut write, read) = ws_stream.split();
@@ -153,10 +150,16 @@ impl ExchangeWSSession for GateExchangeWSSession {
         // Spawn both tasks and wait for either to complete
         let ping_handle = tokio::spawn(common::ping::send_ping_loop(write_arc.clone(), "Gate"));
         let read_handle = tokio::spawn(handle_ws_read(
-            state,
-            server,
+            state.clone(),
+            server.clone(),
             read,
             write_arc.clone(),
+            pair_names[0].clone(),
+        ));
+
+        let _ = tokio::spawn(resync_orderbook_loop(
+            state.clone(),
+            server.clone(),
             pair_names[0].clone(),
         ));
 
@@ -169,5 +172,233 @@ impl ExchangeWSSession for GateExchangeWSSession {
                 eprintln!("GATE: Read loop ended");
             }
         }
+    }
+}
+
+#[derive(Deserialize)]
+struct MarketOrderDepthREST {
+    asks: Option<Vec<[String; 2]>>,
+    bids: Option<Vec<[String; 2]>>,
+}
+
+async fn handle_resync_orderbook_loop_spot(
+    state: Arc<std::sync::Mutex<AppState>>,
+    server: Arc<WSServer>,
+    pair_name: String,
+) {
+    let client = reqwest::Client::builder().cookie_store(true).build();
+
+    let client = match client {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("[GATE] Error creating reqwest client: {}", e);
+            return;
+        }
+    };
+
+    let pair_index = PAIR_NAMES.iter().position(|p| p == &pair_name);
+    let per_pair_ms = 5000 / PAIR_NAMES.len() as u64;
+
+    // TODO: Actual good queue/semaphore throttling needed here
+    let throttle_duration: std::time::Duration =
+        std::time::Duration::from_millis(per_pair_ms * (pair_index.unwrap_or(0) + 1) as u64);
+
+    tokio::time::sleep(throttle_duration).await;
+
+    loop {
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        let url = std::env::var("GATE_REST_URL")
+            .expect("GATE_REST_URL must be set in .env for spot pairs");
+
+        let req = client
+            .get(format!(
+                "{}/spot/order_book?currency_pair={}",
+                url,
+                pair_name.replace("-", "_").to_uppercase(),
+            ))
+            .send();
+
+        let resp = match req.await {
+            Err(e) => {
+                eprintln!("[GATE] Error fetching order book for {}: {}", pair_name, e);
+                continue;
+            }
+            Ok(r) => r,
+        };
+
+        let text = match resp.text().await {
+            Err(e) => {
+                eprintln!(
+                    "[GATE] Error reading response text for {}: {}",
+                    pair_name, e
+                );
+                continue;
+            }
+            Ok(t) => t,
+        };
+
+        let parsed = match serde_json::from_str::<MarketOrderDepthREST>(&text) {
+            Err(e) => {
+                println!("{}", &text);
+                eprintln!("[GATE] Error parsing JSON for {}: {}", pair_name, e);
+                continue;
+            }
+            Ok(v) => v,
+        };
+
+        let state = state.lock().unwrap();
+
+        if let Some(asks) = parsed.asks {
+            let utc = Utc::now();
+            state.update_order_book(&pair_name, "gate", utc.timestamp_millis(), |order_book| {
+                order_book.clean_asks();
+
+                for ask in asks {
+                    order_book.update_ask(
+                        ask[0].parse::<f64>().unwrap(),
+                        ask[1].parse::<f64>().unwrap(),
+                    );
+                }
+            });
+        }
+
+        if let Some(bids) = parsed.bids {
+            let utc = Utc::now();
+            state.update_order_book(&pair_name, "gate", utc.timestamp_millis(), |order_book| {
+                order_book.clean_bids();
+
+                for bid in bids {
+                    order_book.update_bid(
+                        bid[0].parse::<f64>().unwrap(),
+                        bid[1].parse::<f64>().unwrap(),
+                    );
+                }
+            });
+        }
+
+        server.notify_price_change(&state.exchange_price_map, &pair_name, "gate");
+    }
+}
+
+#[derive(Deserialize)]
+struct PerpMarketOrderDepthItemRest {
+    s: f64,
+    p: String,
+}
+
+#[derive(Deserialize)]
+struct PerpMarketOrderDepthREST {
+    asks: Option<Vec<PerpMarketOrderDepthItemRest>>,
+    bids: Option<Vec<PerpMarketOrderDepthItemRest>>,
+}
+
+async fn handle_resync_orderbook_loop_perp(
+    state: Arc<std::sync::Mutex<AppState>>,
+    server: Arc<WSServer>,
+    pair_name: String,
+) {
+    let client = reqwest::Client::builder().cookie_store(true).build();
+
+    let client = match client {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("[GATE] Error creating reqwest client: {}", e);
+            return;
+        }
+    };
+
+    let pair_index = PAIR_NAMES.iter().position(|p| p == &pair_name);
+    let per_pair_ms = 5000 / PAIR_NAMES.len() as u64;
+
+    // TODO: Actual good queue/semaphore throttling needed here
+    let throttle_duration: std::time::Duration =
+        std::time::Duration::from_millis(per_pair_ms * (pair_index.unwrap_or(0) + 1) as u64);
+
+    tokio::time::sleep(throttle_duration).await;
+
+    loop {
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        let url = std::env::var("GATE_REST_URL")
+            .expect("GATE_REST_URL must be set in .env for spot pairs");
+
+        let req = client
+            .get(format!(
+                "{}/futures/usdt/order_book?contract={}",
+                url,
+                pair_name.replace("-perp", "").replace("-", "_").to_uppercase(),
+            ))
+            .send();
+
+        let resp = match req.await {
+            Err(e) => {
+                eprintln!("[GATE] Error fetching order book for {}: {}", pair_name, e);
+                continue;
+            }
+            Ok(r) => r,
+        };
+
+        let text = match resp.text().await {
+            Err(e) => {
+                eprintln!(
+                    "[GATE] Error reading response text for {}: {}",
+                    pair_name, e
+                );
+                continue;
+            }
+            Ok(t) => t,
+        };
+
+        let parsed = match serde_json::from_str::<PerpMarketOrderDepthREST>(&text) {
+            Err(e) => {
+                println!("{}", &text);
+                eprintln!("[GATE] Error parsing JSON for {}: {}", pair_name, e);
+                continue;
+            }
+            Ok(v) => v,
+        };
+
+        let state = state.lock().unwrap();
+
+        if let Some(asks) = parsed.asks {
+            let utc = Utc::now();
+            state.update_order_book(&pair_name, "gate", utc.timestamp_millis(), |order_book| {
+                order_book.clean_asks();
+
+                for ask in asks {
+                    order_book.update_ask(
+                        ask.p.parse::<f64>().unwrap(),
+                        ask.s,
+                    );
+                }
+            });
+        }
+
+        if let Some(bids) = parsed.bids {
+            let utc = Utc::now();
+            state.update_order_book(&pair_name, "gate", utc.timestamp_millis(), |order_book| {
+                order_book.clean_bids();
+
+                for bid in bids {
+                    order_book.update_bid(
+                        bid.p.parse::<f64>().unwrap(),
+                        bid.s,
+                    );
+                }
+            });
+        }
+
+        server.notify_price_change(&state.exchange_price_map, &pair_name, "gate");
+    }
+}
+
+async fn resync_orderbook_loop(
+    state: Arc<std::sync::Mutex<AppState>>,
+    server: Arc<WSServer>,
+    pair_name: String,
+) {
+    if pair_name.ends_with("-perp") {
+        handle_resync_orderbook_loop_perp(state, server, pair_name).await;
+    } else {
+        handle_resync_orderbook_loop_spot(state, server, pair_name).await;
     }
 }
