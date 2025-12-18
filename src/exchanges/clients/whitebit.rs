@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use chrono::Utc;
 use futures::SinkExt;
 use futures_util::StreamExt;
 use serde::Deserialize;
@@ -13,8 +14,11 @@ use tokio_tungstenite::{
 use crate::{
     common::{self},
     define_prometheus_counter,
+    exchanges::clients::{
+        WS_CLIENTS_PACKAGES_RECEIVED_COUNTER,
+        interface::ExchangeWSSession,
+    },
     state::{AppControl, AppState},
-    exchanges::clients::{WS_CLIENTS_PACKAGES_RECEIVED_COUNTER, interface::ExchangeWSSession},
     ws_server::WSServer,
 };
 
@@ -26,7 +30,7 @@ define_prometheus_counter!(
 
 #[derive(Deserialize)]
 struct MarketOrderDepth {
-    event_time: f64,
+    timestamp: f64,
 
     asks: Option<Vec<[String; 2]>>,
     bids: Option<Vec<[String; 2]>>,
@@ -60,7 +64,7 @@ async fn handle_ws_read(
                 WHITEBIT_UPDATES_RECEIVED_COUNTER.inc();
 
                 if let Some(data) = parsed.params {
-                    let ts_i64 = data.1.event_time as i64;
+                    let ts_i64 = data.1.timestamp as i64;
                     let safe_state = state.lock().expect("Failed to lock");
 
                     // Update order book directly without cloning
@@ -95,10 +99,10 @@ async fn handle_ws_read(
                         if let Some(pe) = exchange_map.get("whitebit") {
                             if pe.order_book.get_depth() >= 5 {
                                 server.notify_price_change(
-                                        &safe_state.exchange_price_map,
-                                        &pair_name,
-                                        "whitebit",
-                                    );
+                                    &safe_state.exchange_price_map,
+                                    &pair_name,
+                                    "whitebit",
+                                );
                             }
                         }
                     }
@@ -168,12 +172,18 @@ impl ExchangeWSSession for WhitebitExchangeWSSession {
         let write_arc = Arc::new(Mutex::new(write));
 
         // Spawn both tasks and wait for either to complete
-        let ping_handle = tokio::spawn(common::ping::send_ping_loop(write_arc.clone(), "Whitebit"));
+        let ping_handle = tokio::spawn(common::ping::send_ping_loop(write_arc.clone(), "WHITEBIT"));
         let read_handle = tokio::spawn(handle_ws_read(
-            state,
-            server,
+            state.clone(),
+            server.clone(),
             read,
             write_arc.clone(),
+            pair_names[0].clone(),
+        ));
+
+        let _ = tokio::spawn(resync_orderbook_loop(
+            state.clone(),
+            server.clone(),
             pair_names[0].clone(),
         ));
 
@@ -186,5 +196,105 @@ impl ExchangeWSSession for WhitebitExchangeWSSession {
                 eprintln!("WHITEBIT: Read loop ended");
             }
         }
+    }
+}
+
+#[derive(Deserialize)]
+struct MarketOrderDepthREST {
+    asks: Option<Vec<[String; 2]>>,
+    bids: Option<Vec<[String; 2]>>,
+}
+
+async fn resync_orderbook_loop(
+    state: Arc<std::sync::Mutex<AppState>>,
+    server: Arc<WSServer>,
+    pair_name: String,
+) {
+    loop {
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+
+        let url = std::env::var("WHITEBIT_REST_URL")
+                .expect("WHITEBIT_REST_URL must be set in .env for spot pairs");
+
+        let req = reqwest::get(format!(
+            "{}/public/orderbook/{}?&limit=5",
+            url,
+            pair_name
+                .replace("usdt-perp", "perp")
+                .replace("-", "_")
+                .to_uppercase(),
+        ));
+
+        let resp = match req.await {
+            Err(e) => {
+                eprintln!(
+                    "[WHITEBIT] Error fetching order book for {}: {}",
+                    pair_name, e
+                );
+                continue;
+            }
+            Ok(r) => r,
+        };
+
+        let text = match resp.text().await {
+            Err(e) => {
+                eprintln!(
+                    "[WHITEBIT] Error reading response text for {}: {}",
+                    pair_name, e
+                );
+                continue;
+            }
+            Ok(t) => t,
+        };
+
+        let parsed = match serde_json::from_str::<MarketOrderDepthREST>(&text) {
+            Err(e) => {
+                eprintln!("[WHITEBIT] Error parsing JSON for {}: {}", pair_name, e);
+                continue;
+            }
+            Ok(v) => v,
+        };
+
+        let state = state.lock().unwrap();
+
+        if let Some(asks) = parsed.asks {
+            let utc = Utc::now();
+            state.update_order_book(
+                &pair_name,
+                "whitebit",
+                utc.timestamp_millis(),
+                |order_book| {
+                    order_book.clean_asks();
+
+                    for ask in asks {
+                        order_book.update_ask(
+                            ask[0].as_str().parse::<f64>().unwrap(),
+                            ask[1].as_str().parse::<f64>().unwrap(),
+                        );
+                    }
+                },
+            );
+        }
+
+        if let Some(bids) = parsed.bids {
+            let utc = Utc::now();
+            state.update_order_book(
+                &pair_name,
+                "whitebit",
+                utc.timestamp_millis(),
+                |order_book| {
+                    order_book.clean_bids();
+
+                    for bid in bids {
+                        order_book.update_bid(
+                            bid[0].as_str().parse::<f64>().unwrap(),
+                            bid[1].as_str().parse::<f64>().unwrap(),
+                        );
+                    }
+                },
+            );
+        }
+
+        server.notify_price_change(&state.exchange_price_map, &pair_name, "whitebit");
     }
 }

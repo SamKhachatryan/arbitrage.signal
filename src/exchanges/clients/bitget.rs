@@ -15,7 +15,7 @@ use crate::{
     common, define_prometheus_counter,
     exchanges::clients::{
         WS_CLIENTS_PACKAGES_RECEIVED_COUNTER,
-        interface::{ExchangeResyncOrderbook, ExchangeWSSession},
+        interface::ExchangeWSSession,
     },
     state::{AppControl, AppState, PAIR_NAMES},
     ws_server::WSServer,
@@ -94,10 +94,10 @@ async fn handle_ws_read(
                             if let Some(pe) = exchange_map.get("bitget") {
                                 if pe.order_book.get_depth() >= 5 {
                                     server.notify_price_change(
-                                            &safe_state.exchange_price_map,
-                                            &pair_name,
-                                            "bitget",
-                                        );
+                                        &safe_state.exchange_price_map,
+                                        &pair_name,
+                                        "bitget",
+                                    );
                                 }
                             }
                         }
@@ -183,15 +183,18 @@ impl ExchangeWSSession for BitgetExchangeWSSession {
             pair_names[0].to_string(),
         ));
 
+        let _ = tokio::spawn(resync_orderbook_loop(
+            state.clone(),
+            server.clone(),
+            pair_names[0].to_string(),
+        ));
+
         // Wait for either task to complete (whichever finishes first indicates connection is done)
         tokio::select! {
             _ = ping_handle => {
                 eprintln!("[BITGET] Ping loop ended");
             }
             _ = read_handle => {
-                eprintln!("[BITGET] Read loop ended");
-            }
-            _ = self.resync_orderbook_loop(state.clone(), server.clone(), pair_names[0].to_string()) => {
                 eprintln!("[BITGET] Read loop ended");
             }
         }
@@ -216,45 +219,43 @@ struct BitgetResponseREST<T> {
     data: T,
 }
 
-#[async_trait]
-impl ExchangeResyncOrderbook for BitgetExchangeWSSession {
-    async fn resync_orderbook_loop(
-        &self,
-        state: Arc<std::sync::Mutex<AppState>>,
-        server: Arc<WSServer>,
-        pair_name: String,
-    ) {
-        let client = reqwest::Client::builder().cookie_store(true).build();
+async fn resync_orderbook_loop(
+    state: Arc<std::sync::Mutex<AppState>>,
+    server: Arc<WSServer>,
+    pair_name: String,
+) {
+    let client = reqwest::Client::builder().cookie_store(true).build();
 
-        let client = match client {
-            Ok(c) => c,
-            Err(e) => {
-                eprintln!("[BITGET] Error creating reqwest client: {}", e);
-                return;
-            }
+    let client = match client {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("[BITGET] Error creating reqwest client: {}", e);
+            return;
+        }
+    };
+
+    let pair_index = PAIR_NAMES.iter().position(|p| p == &pair_name);
+    let per_pair_ms = 5000 / PAIR_NAMES.len() as u64;
+
+    // TODO: Actual good queue/semaphore throttling needed here
+    let throttle_duration: std::time::Duration =
+        std::time::Duration::from_millis(per_pair_ms * (pair_index.unwrap_or(0) + 1) as u64);
+
+    tokio::time::sleep(throttle_duration).await;
+
+    loop {
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        let url = std::env::var("BITGET_REST_URL")
+            .expect("BITGET_REST_URL must be set in .env for spot pairs");
+
+        let endpoint = if pair_name.ends_with("-perp") {
+            "mix/market/merge-depth?limit=5&productType=usdt-futures&precision=scale0"
+        } else {
+            "spot/market/orderbook?limit=5"
         };
 
-        let pair_index = PAIR_NAMES.iter().position(|p| p == &pair_name);
-        let per_pair_ms = 5000 / PAIR_NAMES.len() as u64;
-
-        // TODO: Actual good queue/semaphore throttling needed here
-        let throttle_duration: std::time::Duration =
-            std::time::Duration::from_millis(per_pair_ms * (pair_index.unwrap_or(0) + 1) as u64);
-
-        tokio::time::sleep(throttle_duration).await;
-
-        loop {
-            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-            let url = std::env::var("BITGET_REST_URL")
-                .expect("BITGET_REST_URL must be set in .env for spot pairs");
-
-            let endpoint = if pair_name.ends_with("-perp") {
-                "mix/market/merge-depth?limit=5&productType=usdt-futures&precision=scale0"
-            } else {
-                "spot/market/orderbook?limit=5"
-            };
-
-            let req = client.get(format!(
+        let req = client
+            .get(format!(
                 "{}/{}&symbol={}",
                 url,
                 endpoint,
@@ -262,97 +263,82 @@ impl ExchangeResyncOrderbook for BitgetExchangeWSSession {
                     .replace("-perp", "")
                     .replace("-", "")
                     .to_uppercase(),
-            )).send();
+            ))
+            .send();
 
-            let resp = match req.await {
-                Err(e) => {
-                    eprintln!(
-                        "[BITGET] Error fetching order book for {}: {}",
-                        pair_name, e
-                    );
-                    continue;
-                }
-                Ok(r) => r,
-            };
-
-            let text = match resp.text().await {
-                Err(e) => {
-                    eprintln!(
-                        "[BITGET] Error reading response text for {}: {}",
-                        pair_name, e
-                    );
-                    continue;
-                }
-                Ok(t) => t,
-            };
-
-            let parsed =
-                match serde_json::from_str::<BitgetResponseREST<MarketOrderDepthREST>>(&text) {
-                    Err(e) => {
-                        println!("{}", &text);
-                        eprintln!("[BITGET] Error parsing JSON for {}: {}", pair_name, e);
-                        continue;
-                    }
-                    Ok(v) => v,
-                };
-
-            let state = state.lock().unwrap();
-
-            if let Some(asks) = parsed.data.asks {
-                let utc = Utc::now();
-                state.update_order_book(
-                    &pair_name,
-                    "bitget",
-                    utc.timestamp_millis(),
-                    |order_book| {
-                        order_book.clean_asks();
-
-                        for ask in asks {
-                            order_book.update_ask(
-                                match ask[0] {
-                                    FloatOrString::Float(f) => f,
-                                    FloatOrString::String(ref s) => s.parse::<f64>().unwrap_or(0.0),
-                                },
-                                match ask[1] {
-                                    FloatOrString::Float(f) => f,
-                                    FloatOrString::String(ref s) => s.parse::<f64>().unwrap_or(0.0),
-                                },
-                            );
-                        }
-                    },
+        let resp = match req.await {
+            Err(e) => {
+                eprintln!(
+                    "[BITGET] Error fetching order book for {}: {}",
+                    pair_name, e
                 );
+                continue;
             }
+            Ok(r) => r,
+        };
 
-            if let Some(bids) = parsed.data.bids {
-                let utc = Utc::now();
-                state.update_order_book(
-                    &pair_name,
-                    "bitget",
-                    utc.timestamp_millis(),
-                    |order_book| {
-                        order_book.clean_bids();
-
-                        for bid in bids {
-                            order_book.update_bid(
-                                match bid[0] {
-                                    FloatOrString::Float(f) => f,
-                                    FloatOrString::String(ref s) => s.parse::<f64>().unwrap_or(0.0),
-                                },
-                                match bid[1] {
-                                    FloatOrString::Float(f) => f,
-                                    FloatOrString::String(ref s) => s.parse::<f64>().unwrap_or(0.0),
-                                },
-                            );
-                        }
-                    },
+        let text = match resp.text().await {
+            Err(e) => {
+                eprintln!(
+                    "[BITGET] Error reading response text for {}: {}",
+                    pair_name, e
                 );
+                continue;
             }
+            Ok(t) => t,
+        };
 
-            server.notify_price_change(
-                    &state.exchange_price_map,
-                    &pair_name,
-                    "bitget",
-                );
+        let parsed = match serde_json::from_str::<BitgetResponseREST<MarketOrderDepthREST>>(&text) {
+            Err(e) => {
+                println!("{}", &text);
+                eprintln!("[BITGET] Error parsing JSON for {}: {}", pair_name, e);
+                continue;
+            }
+            Ok(v) => v,
+        };
+
+        let state = state.lock().unwrap();
+
+        if let Some(asks) = parsed.data.asks {
+            let utc = Utc::now();
+            state.update_order_book(&pair_name, "bitget", utc.timestamp_millis(), |order_book| {
+                order_book.clean_asks();
+
+                for ask in asks {
+                    order_book.update_ask(
+                        match ask[0] {
+                            FloatOrString::Float(f) => f,
+                            FloatOrString::String(ref s) => s.parse::<f64>().unwrap_or(0.0),
+                        },
+                        match ask[1] {
+                            FloatOrString::Float(f) => f,
+                            FloatOrString::String(ref s) => s.parse::<f64>().unwrap_or(0.0),
+                        },
+                    );
+                }
+            });
         }
+
+        if let Some(bids) = parsed.data.bids {
+            let utc = Utc::now();
+            state.update_order_book(&pair_name, "bitget", utc.timestamp_millis(), |order_book| {
+                order_book.clean_bids();
+
+                for bid in bids {
+                    order_book.update_bid(
+                        match bid[0] {
+                            FloatOrString::Float(f) => f,
+                            FloatOrString::String(ref s) => s.parse::<f64>().unwrap_or(0.0),
+                        },
+                        match bid[1] {
+                            FloatOrString::Float(f) => f,
+                            FloatOrString::String(ref s) => s.parse::<f64>().unwrap_or(0.0),
+                        },
+                    );
+                }
+            });
+        }
+
+        server.notify_price_change(&state.exchange_price_map, &pair_name, "bitget");
     }
 }

@@ -15,7 +15,7 @@ use crate::{
     common, define_prometheus_counter,
     exchanges::clients::{
         WS_CLIENTS_PACKAGES_RECEIVED_COUNTER,
-        interface::{ExchangeResyncOrderbook, ExchangeWSSession},
+        interface::ExchangeWSSession,
     },
     state::{AppControl, AppState},
     ws_server::WSServer,
@@ -138,6 +138,12 @@ impl ExchangeWSSession for BinanceExchangeWSSession {
             pair_names[0].to_string(),
         ));
 
+        let _ = tokio::spawn(resync_orderbook_loop(
+            state.clone(),
+            server.clone(),
+            pair_names[0].to_string(),
+        ));
+
         // Wait for either task to complete (whichever finishes first indicates connection is done)
         tokio::select! {
             _ = ping_handle => {
@@ -145,13 +151,6 @@ impl ExchangeWSSession for BinanceExchangeWSSession {
             }
             _ = read_handle => {
                 eprintln!("[BINANCE] Read loop ended");
-            }
-            _ = self.resync_orderbook_loop(
-                state.clone(),
-                server.clone(),
-                pair_names[0].to_string(),
-            ) => {
-                eprintln!("[BINANCE] Resync orderbook loop ended");
             }
         }
     }
@@ -163,110 +162,101 @@ struct MarketOrderDepthREST {
     bids: Option<Vec<[String; 2]>>,
 }
 
-#[async_trait]
-impl ExchangeResyncOrderbook for BinanceExchangeWSSession {
-    async fn resync_orderbook_loop(
-        &self,
-        state: Arc<std::sync::Mutex<AppState>>,
-        server: Arc<WSServer>,
-        pair_name: String,
-    ) {
-        loop {
-            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+async fn resync_orderbook_loop(
+    state: Arc<std::sync::Mutex<AppState>>,
+    server: Arc<WSServer>,
+    pair_name: String,
+) {
+    loop {
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
 
-            let url = if pair_name.ends_with("-perp") {
-                std::env::var("BINANCE_REST_PERP_URL")
-                    .expect("BINANCE_REST_PERP_URL must be set in .env for perp pairs")
-            } else {
-                std::env::var("BINANCE_REST_URL")
-                    .expect("BINANCE_REST_URL must be set in .env for spot pairs")
-            };
+        let url = if pair_name.ends_with("-perp") {
+            std::env::var("BINANCE_REST_PERP_URL")
+                .expect("BINANCE_REST_PERP_URL must be set in .env for perp pairs")
+        } else {
+            std::env::var("BINANCE_REST_URL")
+                .expect("BINANCE_REST_URL must be set in .env for spot pairs")
+        };
 
-            let req = reqwest::get(format!(
-                "{}/depth?symbol={}&limit=5",
-                url,
-                pair_name
-                    .replace("-perp", "")
-                    .replace("-", "")
-                    .to_uppercase(),
-            ));
+        let req = reqwest::get(format!(
+            "{}/depth?symbol={}&limit=5",
+            url,
+            pair_name
+                .replace("-perp", "")
+                .replace("-", "")
+                .to_uppercase(),
+        ));
 
-            let resp = match req.await {
-                Err(e) => {
-                    eprintln!(
-                        "[BINANCE] Error fetching order book for {}: {}",
-                        pair_name, e
-                    );
-                    continue;
-                }
-                Ok(r) => r,
-            };
-
-            let text = match resp.text().await {
-                Err(e) => {
-                    eprintln!(
-                        "[BINANCE] Error reading response text for {}: {}",
-                        pair_name, e
-                    );
-                    continue;
-                }
-                Ok(t) => t,
-            };
-
-            let parsed = match serde_json::from_str::<MarketOrderDepthREST>(&text) {
-                Err(e) => {
-                    eprintln!("[BINANCE] Error parsing JSON for {}: {}", pair_name, e);
-                    continue;
-                }
-                Ok(v) => v,
-            };
-
-            let state = state.lock().unwrap();
-
-            if let Some(asks) = parsed.asks {
-
-                let utc = Utc::now();
-                state.update_order_book(
-                    &pair_name,
-                    "binance",
-                    utc.timestamp_millis(),
-                    |order_book| {
-                        order_book.clean_asks();
-                        
-                        for ask in asks {
-                            order_book.update_ask(
-                                ask[0].as_str().parse::<f64>().unwrap(),
-                                ask[1].as_str().parse::<f64>().unwrap(),
-                            );
-                        }
-                    },
+        let resp = match req.await {
+            Err(e) => {
+                eprintln!(
+                    "[BINANCE] Error fetching order book for {}: {}",
+                    pair_name, e
                 );
+                continue;
             }
+            Ok(r) => r,
+        };
 
-            if let Some(bids) = parsed.bids {
-                let utc = Utc::now();
-                state.update_order_book(
-                    &pair_name,
-                    "binance",
-                    utc.timestamp_millis(),
-                    |order_book| {
-                        order_book.clean_bids();
-
-                        for bid in bids {
-                            order_book.update_bid(
-                                bid[0].as_str().parse::<f64>().unwrap(),
-                                bid[1].as_str().parse::<f64>().unwrap(),
-                            );
-                        }
-                    },
+        let text = match resp.text().await {
+            Err(e) => {
+                eprintln!(
+                    "[BINANCE] Error reading response text for {}: {}",
+                    pair_name, e
                 );
+                continue;
             }
+            Ok(t) => t,
+        };
 
-            server.notify_price_change(
-                &state.exchange_price_map,
+        let parsed = match serde_json::from_str::<MarketOrderDepthREST>(&text) {
+            Err(e) => {
+                eprintln!("[BINANCE] Error parsing JSON for {}: {}", pair_name, e);
+                continue;
+            }
+            Ok(v) => v,
+        };
+
+        let state = state.lock().unwrap();
+
+        if let Some(asks) = parsed.asks {
+            let utc = Utc::now();
+            state.update_order_book(
                 &pair_name,
                 "binance",
+                utc.timestamp_millis(),
+                |order_book| {
+                    order_book.clean_asks();
+
+                    for ask in asks {
+                        order_book.update_ask(
+                            ask[0].as_str().parse::<f64>().unwrap(),
+                            ask[1].as_str().parse::<f64>().unwrap(),
+                        );
+                    }
+                },
             );
         }
+
+        if let Some(bids) = parsed.bids {
+            let utc = Utc::now();
+            state.update_order_book(
+                &pair_name,
+                "binance",
+                utc.timestamp_millis(),
+                |order_book| {
+                    order_book.clean_bids();
+
+                    for bid in bids {
+                        order_book.update_bid(
+                            bid[0].as_str().parse::<f64>().unwrap(),
+                            bid[1].as_str().parse::<f64>().unwrap(),
+                        );
+                    }
+                },
+            );
+        }
+
+        server.notify_price_change(&state.exchange_price_map, &pair_name, "binance");
     }
 }
