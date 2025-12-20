@@ -139,7 +139,7 @@ impl ExchangeWSSession for BinanceExchangeWSSession {
             pair_names[0].to_string(),
         ));
 
-        let mut resync_handle = tokio::spawn(resync_orderbook_loop(
+        let resync_handle = tokio::spawn(resync_orderbook_loop(
             state.clone(),
             server.clone(),
             pair_names[0].to_string(),

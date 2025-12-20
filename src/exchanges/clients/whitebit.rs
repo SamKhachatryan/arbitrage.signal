@@ -182,7 +182,7 @@ impl ExchangeWSSession for WhitebitExchangeWSSession {
             pair_names[0].clone(),
         ));
 
-        let mut resync_handle = tokio::spawn(resync_orderbook_loop(
+        let resync_handle = tokio::spawn(resync_orderbook_loop(
             state.clone(),
             server.clone(),
             pair_names[0].clone(),
