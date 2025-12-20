@@ -149,8 +149,8 @@ impl ExchangeWSSession for GateExchangeWSSession {
         let write_arc = Arc::new(Mutex::new(write));
 
         // Spawn both tasks and wait for either to complete
-        let ping_handle = tokio::spawn(common::ping::send_ping_loop(write_arc.clone(), "Gate"));
-        let read_handle = tokio::spawn(handle_ws_read(
+        let mut ping_handle = tokio::spawn(common::ping::send_ping_loop(write_arc.clone(), "Gate"));
+        let mut read_handle = tokio::spawn(handle_ws_read(
             state.clone(),
             server.clone(),
             read,
@@ -158,7 +158,7 @@ impl ExchangeWSSession for GateExchangeWSSession {
             pair_names[0].clone(),
         ));
 
-        let _ = tokio::spawn(resync_orderbook_loop(
+        let mut resync_handle = tokio::spawn(resync_orderbook_loop(
             state.clone(),
             server.clone(),
             pair_names[0].clone(),
@@ -167,14 +167,20 @@ impl ExchangeWSSession for GateExchangeWSSession {
 
         // Wait for either task to complete or cancellation
         tokio::select! {
-            _ = ping_handle => {
+            _ = &mut ping_handle => {
                 eprintln!("GATE: Ping loop ended");
             }
-            _ = read_handle => {
+            _ = &mut read_handle => {
                 eprintln!("GATE: Read loop ended");
             }
             _ = cancel_token.cancelled() => {
-                eprintln!("GATE: Cancelled");
+                eprintln!("GATE: Cancelled - ABORTING ALL TASKS");
+                ping_handle.abort();
+                read_handle.abort();
+                resync_handle.abort();
+                drop(write_arc);
+                eprintln!("GATE: All tasks aborted, connection dropped");
+                return;
             }
         }
     }

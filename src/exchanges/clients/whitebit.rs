@@ -173,8 +173,8 @@ impl ExchangeWSSession for WhitebitExchangeWSSession {
         let write_arc = Arc::new(Mutex::new(write));
 
         // Spawn both tasks and wait for either to complete
-        let ping_handle = tokio::spawn(common::ping::send_ping_loop(write_arc.clone(), "WHITEBIT"));
-        let read_handle = tokio::spawn(handle_ws_read(
+        let mut ping_handle = tokio::spawn(common::ping::send_ping_loop(write_arc.clone(), "WHITEBIT"));
+        let mut read_handle = tokio::spawn(handle_ws_read(
             state.clone(),
             server.clone(),
             read,
@@ -182,7 +182,7 @@ impl ExchangeWSSession for WhitebitExchangeWSSession {
             pair_names[0].clone(),
         ));
 
-        let _ = tokio::spawn(resync_orderbook_loop(
+        let mut resync_handle = tokio::spawn(resync_orderbook_loop(
             state.clone(),
             server.clone(),
             pair_names[0].clone(),
@@ -191,14 +191,20 @@ impl ExchangeWSSession for WhitebitExchangeWSSession {
 
         // Wait for either task to complete or cancellation
         tokio::select! {
-            _ = ping_handle => {
+            _ = &mut ping_handle => {
                 eprintln!("WHITEBIT: Ping loop ended");
             }
-            _ = read_handle => {
+            _ = &mut read_handle => {
                 eprintln!("WHITEBIT: Read loop ended");
             }
             _ = cancel_token.cancelled() => {
-                eprintln!("WHITEBIT: Cancelled");
+                eprintln!("WHITEBIT: Cancelled - ABORTING ALL TASKS");
+                ping_handle.abort();
+                read_handle.abort();
+                resync_handle.abort();
+                drop(write_arc);
+                eprintln!("WHITEBIT: All tasks aborted, connection dropped");
+                return;
             }
         }
     }

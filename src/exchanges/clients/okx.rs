@@ -152,8 +152,8 @@ impl ExchangeWSSession for OkxExchangeWSSession {
         let write_arc = Arc::new(Mutex::new(write));
 
         // Spawn both tasks and wait for either to complete
-        let ping_handle = tokio::spawn(common::ping::send_ping_loop(write_arc.clone(), "Okx"));
-        let read_handle = tokio::spawn(handle_ws_read(
+        let mut ping_handle = tokio::spawn(common::ping::send_ping_loop(write_arc.clone(), "Okx"));
+        let mut read_handle = tokio::spawn(handle_ws_read(
             state.clone(),
             server.clone(),
             read,
@@ -161,7 +161,7 @@ impl ExchangeWSSession for OkxExchangeWSSession {
             pair_names[0].to_string(),
         ));
 
-        let _ = tokio::spawn(resync_orderbook_loop(
+        let mut resync_handle = tokio::spawn(resync_orderbook_loop(
             state.clone(),
             server.clone(),
             pair_names[0].to_string(),
@@ -170,14 +170,20 @@ impl ExchangeWSSession for OkxExchangeWSSession {
 
         // Wait for either task to complete or cancellation
         tokio::select! {
-            _ = ping_handle => {
+            _ = &mut ping_handle => {
                 eprintln!("OKX: Ping loop ended");
             }
-            _ = read_handle => {
+            _ = &mut read_handle => {
                 eprintln!("OKX: Read loop ended");
             }
             _ = cancel_token.cancelled() => {
-                eprintln!("OKX: Cancelled");
+                eprintln!("OKX: Cancelled - ABORTING ALL TASKS");
+                ping_handle.abort();
+                read_handle.abort();
+                resync_handle.abort();
+                drop(write_arc);
+                eprintln!("OKX: All tasks aborted, connection dropped");
+                return;
             }
         }
     }
