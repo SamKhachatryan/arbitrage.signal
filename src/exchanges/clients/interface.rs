@@ -5,6 +5,7 @@ use async_trait::async_trait;
 use tokio::net::TcpStream;
 use tokio::time::sleep;
 use tokio_tungstenite::{connect_async_tls_with_config, Connector, MaybeTlsStream, WebSocketStream};
+use tokio_util::sync::CancellationToken;
 
 use crate::define_prometheus_gauge;
 use crate::{state::AppState, tls::make_tls_config, ws_server::WSServer};
@@ -29,6 +30,7 @@ pub trait ExchangeWSClient<S: ExchangeWSSession + Send + Sync> {
         state: Arc<Mutex<AppState>>,
         server: Arc<WSServer>,
         pairs: Vec<String>,
+        cancel_token: CancellationToken,
     );
 }
 
@@ -40,6 +42,7 @@ pub trait ExchangeWSSession: Send + Sync {
         state: Arc<Mutex<AppState>>,
         server: Arc<WSServer>,
         pairs: Vec<String>,
+        cancel_token: CancellationToken,
     );
 }
 
@@ -70,6 +73,7 @@ where
         state: Arc<Mutex<AppState>>,
         server: Arc<WSServer>,
         pairs: Vec<String>,
+        cancel_token: CancellationToken,
     ) {
         let url = self.url.clone();
         let state = Arc::clone(&state);
@@ -77,17 +81,18 @@ where
         let session = Arc::clone(&self.session);
 
         tokio::spawn(async move {
-            // let mut retry_count = 0u32;
-
             loop {
+                // Check if cancelled before attempting connection
+                if cancel_token.is_cancelled() {
+                    println!("Subscription cancelled for {}", url);
+                    break;
+                }
+
                 let tls_config = make_tls_config();
                 let connector = Connector::Rustls(tls_config);
 
                 match connect_async_tls_with_config(&url, None, false, Some(connector)).await {
                     Ok((ws_stream, _resp)) => {
-                        // eprintln!("Successfully connected to {url}");
-                        // retry_count = 0;
-                        
                         ACTIVE_WS_CLIENTS_GAUGE.inc();
 
                         session
@@ -96,15 +101,19 @@ where
                                 Arc::clone(&state),
                                 Arc::clone(&server),
                                 pairs.clone(),
+                                cancel_token.clone(),
                             )
                             .await;
 
                         ACTIVE_WS_CLIENTS_GAUGE.dec();
-                        // eprintln!("Session ended for {url}, reconnecting...");
+                        
+                        // Check if cancelled before reconnecting
+                        if cancel_token.is_cancelled() {
+                            println!("Subscription cancelled for {}, not reconnecting", url);
+                            break;
+                        }
                     }
                     Err(e) => {
-                        // retry_count += 1;
-                        // eprintln!("Failed to connect to {url} (attempt #{retry_count}): {e}");
                         
                         if e.to_string().contains("10053") {
                             eprintln!("  → This is a Windows connection abort error. Usually caused by:");
@@ -112,10 +121,23 @@ where
                             eprintln!("     - Invalid certificate chain");
                             eprintln!("     - Firewall/antivirus blocking connection");
                         }
+                        
+                        // Check if cancelled before sleeping
+                        if cancel_token.is_cancelled() {
+                            println!("Subscription cancelled for {} during error handling", url);
+                            break;
+                        }
                     }
                 }
 
-                sleep(Duration::from_secs(2)).await;
+                // Use tokio::select to make sleep cancellable
+                tokio::select! {
+                    _ = sleep(Duration::from_secs(2)) => {}
+                    _ = cancel_token.cancelled() => {
+                        println!("Subscription cancelled for {} during sleep", url);
+                        break;
+                    }
+                }
             }
         });
     }

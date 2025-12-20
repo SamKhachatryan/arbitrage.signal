@@ -123,6 +123,7 @@ impl ExchangeWSSession for BinanceExchangeWSSession {
         state: Arc<std::sync::Mutex<AppState>>,
         server: Arc<WSServer>,
         pair_names: Vec<String>,
+        cancel_token: tokio_util::sync::CancellationToken,
     ) {
         let (write, read) = ws_stream.split();
 
@@ -142,15 +143,19 @@ impl ExchangeWSSession for BinanceExchangeWSSession {
             state.clone(),
             server.clone(),
             pair_names[0].to_string(),
+            cancel_token.clone(),
         ));
 
-        // Wait for either task to complete (whichever finishes first indicates connection is done)
+        // Wait for either task to complete or cancellation
         tokio::select! {
             _ = ping_handle => {
                 eprintln!("[BINANCE] Ping loop ended");
             }
             _ = read_handle => {
                 eprintln!("[BINANCE] Read loop ended");
+            }
+            _ = cancel_token.cancelled() => {
+                eprintln!("[BINANCE] Cancelled");
             }
         }
     }
@@ -166,9 +171,16 @@ async fn resync_orderbook_loop(
     state: Arc<std::sync::Mutex<AppState>>,
     server: Arc<WSServer>,
     pair_name: String,
+    cancel_token: tokio_util::sync::CancellationToken,
 ) {
     loop {
-        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        tokio::select! {
+            _ = tokio::time::sleep(std::time::Duration::from_secs(5)) => {},
+            _ = cancel_token.cancelled() => {
+                eprintln!("[BINANCE] Resync cancelled for {}", pair_name);
+                return;
+            }
+        }
 
         let url = if pair_name.ends_with("-perp") {
             std::env::var("BINANCE_REST_PERP_URL")

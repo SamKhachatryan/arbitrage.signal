@@ -113,6 +113,7 @@ impl ExchangeWSSession for GateExchangeWSSession {
         state: Arc<std::sync::Mutex<AppState>>,
         server: Arc<WSServer>,
         pair_names: Vec<String>,
+        cancel_token: tokio_util::sync::CancellationToken,
     ) {
         let (mut write, read) = ws_stream.split();
 
@@ -161,15 +162,19 @@ impl ExchangeWSSession for GateExchangeWSSession {
             state.clone(),
             server.clone(),
             pair_names[0].clone(),
+            cancel_token.clone(),
         ));
 
-        // Wait for either task to complete (whichever finishes first indicates connection is done)
+        // Wait for either task to complete or cancellation
         tokio::select! {
             _ = ping_handle => {
                 eprintln!("GATE: Ping loop ended");
             }
             _ = read_handle => {
                 eprintln!("GATE: Read loop ended");
+            }
+            _ = cancel_token.cancelled() => {
+                eprintln!("GATE: Cancelled");
             }
         }
     }
@@ -185,6 +190,7 @@ async fn handle_resync_orderbook_loop_spot(
     state: Arc<std::sync::Mutex<AppState>>,
     server: Arc<WSServer>,
     pair_name: String,
+    cancel_token: tokio_util::sync::CancellationToken,
 ) {
     let client = reqwest::Client::builder().cookie_store(true).build();
 
@@ -203,10 +209,23 @@ async fn handle_resync_orderbook_loop_spot(
     let throttle_duration: std::time::Duration =
         std::time::Duration::from_millis(per_pair_ms * (pair_index.unwrap_or(0) + 1) as u64);
 
-    tokio::time::sleep(throttle_duration).await;
+    tokio::select! {
+        _ = tokio::time::sleep(throttle_duration) => {}
+        _ = cancel_token.cancelled() => {
+            eprintln!("[GATE] Resync cancelled during initial throttle for {}", pair_name);
+            return;
+        }
+    }
 
     loop {
-        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        tokio::select! {
+            _ = tokio::time::sleep(std::time::Duration::from_secs(5)) => {}
+            _ = cancel_token.cancelled() => {
+                eprintln!("[GATE SPOT] Resync cancelled for {}", pair_name);
+                return;
+            }
+        }
+        
         let url = std::env::var("GATE_REST_URL")
             .expect("GATE_REST_URL must be set in .env for spot pairs");
 
@@ -296,6 +315,7 @@ async fn handle_resync_orderbook_loop_perp(
     state: Arc<std::sync::Mutex<AppState>>,
     server: Arc<WSServer>,
     pair_name: String,
+    cancel_token: tokio_util::sync::CancellationToken,
 ) {
     let client = reqwest::Client::builder().cookie_store(true).build();
 
@@ -314,10 +334,23 @@ async fn handle_resync_orderbook_loop_perp(
     let throttle_duration: std::time::Duration =
         std::time::Duration::from_millis(per_pair_ms * (pair_index.unwrap_or(0) + 1) as u64);
 
-    tokio::time::sleep(throttle_duration).await;
+    tokio::select! {
+        _ = tokio::time::sleep(throttle_duration) => {}
+        _ = cancel_token.cancelled() => {
+            eprintln!("[GATE] Resync cancelled during initial throttle for {}", pair_name);
+            return;
+        }
+    }
 
     loop {
-        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        tokio::select! {
+            _ = tokio::time::sleep(std::time::Duration::from_secs(5)) => {}
+            _ = cancel_token.cancelled() => {
+                eprintln!("[GATE] Resync cancelled for {}", pair_name);
+                return;
+            }
+        }
+        
         let url = std::env::var("GATE_REST_URL")
             .expect("GATE_REST_URL must be set in .env for spot pairs");
 
@@ -395,10 +428,11 @@ async fn resync_orderbook_loop(
     state: Arc<std::sync::Mutex<AppState>>,
     server: Arc<WSServer>,
     pair_name: String,
+    cancel_token: tokio_util::sync::CancellationToken,
 ) {
     if pair_name.ends_with("-perp") {
-        handle_resync_orderbook_loop_perp(state, server, pair_name).await;
+        handle_resync_orderbook_loop_perp(state, server, pair_name, cancel_token).await;
     } else {
-        handle_resync_orderbook_loop_spot(state, server, pair_name).await;
+        handle_resync_orderbook_loop_spot(state, server, pair_name, cancel_token).await;
     }
 }

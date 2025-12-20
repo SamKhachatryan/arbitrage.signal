@@ -129,6 +129,7 @@ impl ExchangeWSSession for OkxExchangeWSSession {
         state: Arc<std::sync::Mutex<AppState>>,
         server: Arc<WSServer>,
         pair_names: Vec<String>,
+        cancel_token: tokio_util::sync::CancellationToken,
     ) {
         let (mut write, read) = ws_stream.split();
 
@@ -164,15 +165,19 @@ impl ExchangeWSSession for OkxExchangeWSSession {
             state.clone(),
             server.clone(),
             pair_names[0].to_string(),
+            cancel_token.clone(),
         ));
 
-        // Wait for either task to complete (whichever finishes first indicates connection is done)
+        // Wait for either task to complete or cancellation
         tokio::select! {
             _ = ping_handle => {
                 eprintln!("OKX: Ping loop ended");
             }
             _ = read_handle => {
                 eprintln!("OKX: Read loop ended");
+            }
+            _ = cancel_token.cancelled() => {
+                eprintln!("OKX: Cancelled");
             }
         }
     }
@@ -193,6 +198,7 @@ async fn resync_orderbook_loop(
     state: Arc<std::sync::Mutex<AppState>>,
     server: Arc<WSServer>,
     pair_name: String,
+    cancel_token: tokio_util::sync::CancellationToken,
 ) {
     let client = reqwest::Client::builder().cookie_store(true).build();
 
@@ -211,10 +217,23 @@ async fn resync_orderbook_loop(
     let throttle_duration: std::time::Duration =
         std::time::Duration::from_millis(per_pair_ms * (pair_index.unwrap_or(0) + 1) as u64);
 
-    tokio::time::sleep(throttle_duration).await;
+    tokio::select! {
+        _ = tokio::time::sleep(throttle_duration) => {}
+        _ = cancel_token.cancelled() => {
+            eprintln!("[OKX] Resync cancelled during initial throttle for {}", pair_name);
+            return;
+        }
+    }
 
     loop {
-        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        tokio::select! {
+            _ = tokio::time::sleep(std::time::Duration::from_secs(5)) => {}
+            _ = cancel_token.cancelled() => {
+                eprintln!("[OKX] Resync cancelled for {}", pair_name);
+                return;
+            }
+        }
+        
         let url =
             std::env::var("OKX_REST_URL").expect("OKX_REST_URL must be set in .env for spot pairs");
 

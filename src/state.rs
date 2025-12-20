@@ -1,7 +1,4 @@
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 
 use chrono::{TimeZone, Utc, offset::LocalResult};
 use dashmap::DashMap;
@@ -72,7 +69,7 @@ pub struct PairExchange {
 }
 
 pub struct AppState {
-    pub exchange_price_map: Arc<HashMap<String, DashMap<String, PairExchange>>>,
+    pub exchange_price_map: Arc<DashMap<String, DashMap<String, PairExchange>>>,
 }
 
 pub trait AppControl {
@@ -86,31 +83,32 @@ impl AppControl for AppState {
     where
         F: FnOnce(&mut OrderBook),
     {
-        if let Some(exchange_map) = self.exchange_price_map.get(pair) {
-            let now = Utc::now();
-            if let LocalResult::Single(ts_datetime) = Utc.timestamp_millis_opt(ts) {
-                let diff_ms = (now - ts_datetime).num_milliseconds() as i32;
-                
-                let mut entry = exchange_map
-                    .entry(exchange.to_string())
-                    .or_insert_with(|| PairExchange {
-                        order_book: OrderBook::new(),
-                        latency: 0,
-                        last_update_ts: 0,
-                    });
-                
-                updater(&mut entry.order_book);
-                entry.latency = diff_ms.max(0);
-                entry.last_update_ts = ts;
-            }
-        } else {
-            eprintln!("Unknown pair: {}", pair);
+        let now = Utc::now();
+        if let LocalResult::Single(ts_datetime) = Utc.timestamp_millis_opt(ts) {
+            let diff_ms = (now - ts_datetime).num_milliseconds() as i32;
+            
+            // Get or insert the exchange map for this pair
+            let exchange_map = self.exchange_price_map
+                .entry(pair.to_string())
+                .or_insert_with(|| DashMap::new());
+            
+            let mut entry = exchange_map
+                .entry(exchange.to_string())
+                .or_insert_with(|| PairExchange {
+                    order_book: OrderBook::new(),
+                    latency: 0,
+                    last_update_ts: 0,
+                });
+            
+            updater(&mut entry.order_book);
+            entry.latency = diff_ms.max(0);
+            entry.last_update_ts = ts;
         }
     }
 }
 
 pub fn init_app_state() -> Arc<Mutex<AppState>> {
-    let mut map: HashMap<String, DashMap<String, PairExchange>> = HashMap::new();
+    let map: DashMap<String, DashMap<String, PairExchange>> = DashMap::new();
 
     for pair_name in PAIR_NAMES.iter() {
         map.insert(pair_name.to_string(), DashMap::new());

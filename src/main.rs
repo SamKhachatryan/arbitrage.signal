@@ -17,12 +17,12 @@ use crate::{health::prometheus::init_prometheus_server, state::init_app_state, w
 async fn main() -> std::io::Result<()> {
     dotenv().ok().expect("Failed to load env variables");
 
-    let server = init_ws_server();
-    let client_server = Arc::clone(&server);
-
     let state = init_app_state();
 
-    exchanges::subscribe_to_all_exchanges(&state, client_server).await;
+    let _ = init_ws_server(Arc::clone(&state));
+    // let client_server = Arc::clone(&server);
+
+    // exchanges::subscribe_to_all_tickers(&state, client_server).await;
 
     let http_server = init_prometheus_server();
 

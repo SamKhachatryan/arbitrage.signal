@@ -142,6 +142,7 @@ impl ExchangeWSSession for WhitebitExchangeWSSession {
         state: Arc<std::sync::Mutex<AppState>>,
         server: Arc<WSServer>,
         pair_names: Vec<String>,
+        cancel_token: tokio_util::sync::CancellationToken,
     ) {
         let (mut write, read) = ws_stream.split();
 
@@ -185,15 +186,19 @@ impl ExchangeWSSession for WhitebitExchangeWSSession {
             state.clone(),
             server.clone(),
             pair_names[0].clone(),
+            cancel_token.clone(),
         ));
 
-        // Wait for either task to complete (whichever finishes first indicates connection is done)
+        // Wait for either task to complete or cancellation
         tokio::select! {
             _ = ping_handle => {
                 eprintln!("WHITEBIT: Ping loop ended");
             }
             _ = read_handle => {
                 eprintln!("WHITEBIT: Read loop ended");
+            }
+            _ = cancel_token.cancelled() => {
+                eprintln!("WHITEBIT: Cancelled");
             }
         }
     }
@@ -209,9 +214,16 @@ async fn resync_orderbook_loop(
     state: Arc<std::sync::Mutex<AppState>>,
     server: Arc<WSServer>,
     pair_name: String,
+    cancel_token: tokio_util::sync::CancellationToken,
 ) {
     loop {
-        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        tokio::select! {
+            _ = tokio::time::sleep(std::time::Duration::from_secs(5)) => {},
+            _ = cancel_token.cancelled() => {
+                eprintln!("[WHITEBIT] Resync cancelled for {}", pair_name);
+                return;
+            }
+        }
 
         let url = std::env::var("WHITEBIT_REST_URL")
                 .expect("WHITEBIT_REST_URL must be set in .env for spot pairs");
