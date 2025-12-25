@@ -12,7 +12,7 @@ use crate::{
     state::{AppState, PairExchange},
 };
 
-const MAX_TOPICS: usize = 20;
+const MAX_TOPICS: usize = 40;
 
 pub struct WSServer {
     clients: Arc<DashMap<u64, Responder>>,
