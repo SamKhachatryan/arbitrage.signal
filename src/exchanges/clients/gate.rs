@@ -235,6 +235,8 @@ async fn handle_resync_orderbook_loop_spot(
         let url = std::env::var("GATE_REST_URL")
             .expect("GATE_REST_URL must be set in .env for spot pairs");
 
+        let utc = Utc::now().timestamp_millis();
+
         let req = client
             .get(format!(
                 "{}/spot/order_book?currency_pair={}",
@@ -274,8 +276,7 @@ async fn handle_resync_orderbook_loop_spot(
         let state = state.lock().unwrap();
 
         if let Some(asks) = parsed.asks {
-            let utc = Utc::now();
-            state.update_order_book(&pair_name, "gate", utc.timestamp_millis(), |order_book| {
+            state.update_order_book(&pair_name, "gate", utc, |order_book| {
                 order_book.clean_asks();
 
                 for ask in asks {
@@ -288,8 +289,7 @@ async fn handle_resync_orderbook_loop_spot(
         }
 
         if let Some(bids) = parsed.bids {
-            let utc = Utc::now();
-            state.update_order_book(&pair_name, "gate", utc.timestamp_millis(), |order_book| {
+            state.update_order_book(&pair_name, "gate", utc, |order_book| {
                 order_book.clean_bids();
 
                 for bid in bids {
@@ -360,6 +360,8 @@ async fn handle_resync_orderbook_loop_perp(
         let url = std::env::var("GATE_REST_URL")
             .expect("GATE_REST_URL must be set in .env for spot pairs");
 
+        let utc = Utc::now().timestamp_millis();
+
         let req = client
             .get(format!(
                 "{}/futures/usdt/order_book?contract={}",
@@ -399,8 +401,7 @@ async fn handle_resync_orderbook_loop_perp(
         let state = state.lock().unwrap();
 
         if let Some(asks) = parsed.asks {
-            let utc = Utc::now();
-            state.update_order_book(&pair_name, "gate", utc.timestamp_millis(), |order_book| {
+            state.update_order_book(&pair_name, "gate", utc, |order_book| {
                 order_book.clean_asks();
 
                 for ask in asks {
@@ -413,8 +414,7 @@ async fn handle_resync_orderbook_loop_perp(
         }
 
         if let Some(bids) = parsed.bids {
-            let utc = Utc::now();
-            state.update_order_book(&pair_name, "gate", utc.timestamp_millis(), |order_book| {
+            state.update_order_book(&pair_name, "gate", utc, |order_book| {
                 order_book.clean_bids();
 
                 for bid in bids {

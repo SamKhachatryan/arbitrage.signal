@@ -243,6 +243,8 @@ async fn resync_orderbook_loop(
         let url =
             std::env::var("OKX_REST_URL").expect("OKX_REST_URL must be set in .env for spot pairs");
 
+        let utc = Utc::now().timestamp_millis();
+
         let req = client
             .get(format!(
                 "{}/market/books?sz=5&instId={}",
@@ -279,8 +281,7 @@ async fn resync_orderbook_loop(
         let state = state.lock().unwrap();
 
         if let Some(asks) = &parsed.data[0].asks {
-            let utc = Utc::now();
-            state.update_order_book(&pair_name, "okx", utc.timestamp_millis(), |order_book| {
+            state.update_order_book(&pair_name, "okx", utc, |order_book| {
                 order_book.clean_asks();
 
                 for ask in asks {
@@ -293,8 +294,7 @@ async fn resync_orderbook_loop(
         }
 
         if let Some(bids) = &parsed.data[0].bids {
-            let utc = Utc::now();
-            state.update_order_book(&pair_name, "okx", utc.timestamp_millis(), |order_book| {
+            state.update_order_book(&pair_name, "okx", utc, |order_book| {
                 order_book.clean_bids();
 
                 for bid in bids {

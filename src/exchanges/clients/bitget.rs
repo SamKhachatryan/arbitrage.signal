@@ -279,6 +279,8 @@ async fn resync_orderbook_loop(
             "spot/market/orderbook?limit=5"
         };
 
+        let utc = Utc::now().timestamp_millis();
+
         let req = client
             .get(format!(
                 "{}/{}&symbol={}",
@@ -325,8 +327,7 @@ async fn resync_orderbook_loop(
         let state = state.lock().unwrap();
 
         if let Some(asks) = parsed.data.asks {
-            let utc = Utc::now();
-            state.update_order_book(&pair_name, "bitget", utc.timestamp_millis(), |order_book| {
+            state.update_order_book(&pair_name, "bitget", utc, |order_book| {
                 order_book.clean_asks();
 
                 for ask in asks {
@@ -345,8 +346,7 @@ async fn resync_orderbook_loop(
         }
 
         if let Some(bids) = parsed.data.bids {
-            let utc = Utc::now();
-            state.update_order_book(&pair_name, "bitget", utc.timestamp_millis(), |order_book| {
+            state.update_order_book(&pair_name, "bitget", utc, |order_book| {
                 order_book.clean_bids();
 
                 for bid in bids {
